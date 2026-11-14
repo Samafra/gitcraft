@@ -15,14 +15,18 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
         ui.selectable_value(&mut app.mcp_transport, McpTransport::Http, "HTTP / JSON-RPC");
     });
 
-    // Desplegable con cadenas de conexión MCP habituales para no tener que recordarlas.
-    let presets: &[(&str, McpTransport, &str)] = &[
-        ("🦀 GitCraft (Modo Cargo Dev)", McpTransport::Stdio, "cargo run -- --mcp-server"),
-        ("🦀 GitCraft (Binario Release)", McpTransport::Stdio, "./target/release/gitcraft --mcp-server"),
-        ("🐙 GitHub MCP Oficial (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-github"),
-        ("📂 Archivos Locales /Users (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-filesystem /Users"),
-        ("🧠 Memoria Persistente (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-memory"),
-        ("🌐 Servidor HTTP Local (8080)", McpTransport::Http, "http://localhost:8080/mcp"),
+    // Resolvemos la carpeta HOME del usuario (/Users/francisco) para que el binario funcione desde cualquier directorio.
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let release_bin = format!("{}/Projects/gitcraft/target/release/gitcraft --mcp-server", home);
+    let dev_cargo = format!("cargo run --manifest-path {}/Projects/gitcraft/Cargo.toml -- --mcp-server", home);
+
+    let presets: Vec<(&str, McpTransport, String)> = vec![
+        ("🦀 GitCraft (Binario Release)", McpTransport::Stdio, release_bin),
+        ("🦀 GitCraft (Modo Cargo Dev)", McpTransport::Stdio, dev_cargo),
+        ("🐙 GitHub MCP Oficial (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-github".into()),
+        ("📂 Archivos Locales /Users (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-filesystem /Users".into()),
+        ("🧠 Memoria Persistente (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-memory".into()),
+        ("🌐 Servidor HTTP Local (8080)", McpTransport::Http, "http://localhost:8080/mcp".into()),
     ];
 
     ui.horizontal(|ui| {
@@ -30,10 +34,10 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
         egui::ComboBox::from_id_salt("mcp_presets_combo")
             .selected_text("Seleccionar servidor...")
             .show_ui(ui, |ui| {
-                for (label, transport, cmd) in presets {
+                for (label, transport, cmd) in &presets {
                     if ui.selectable_label(app.mcp_endpoint == *cmd, *label).clicked() {
                         app.mcp_transport = *transport;
-                        app.mcp_endpoint = (*cmd).to_string();
+                        app.mcp_endpoint = cmd.clone();
                     }
                 }
             });
@@ -51,7 +55,6 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
     }
 
     ui.separator();
-
     // Lista de herramientas expuestas por el servidor MCP conectado.
     if !app.mcp_tools.is_empty() {
         ui.label(egui::RichText::new(app.i18n.t(lang, "mcp_tools_header")).strong());
