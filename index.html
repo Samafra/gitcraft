@@ -7,7 +7,7 @@
     
 <script type="module">
 import init, * as bindings from './gitcraft-8f940b0b58c4c082.js';
-const wasm = await init({ module_or_path: './gitcraft-f5420c4604e1a2bf_bg.wasm' });
+const wasm = await init({ module_or_path: './gitcraft-afcaa1759f21c91_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -38,7 +38,7 @@ dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
             display: block;
         }
     </style>
-<link rel="modulepreload" href="./gitcraft-8f940b0b58c4c082.js" crossorigin="anonymous" integrity="sha384-SOV/Z4K9XM7yjnWM4UyM+EOIGUPm9EAS5OlUtNiDa3oSWB1ph+bScfMfpcAk9nMR"><link rel="preload" href="./gitcraft-f5420c4604e1a2bf_bg.wasm" crossorigin="anonymous" integrity="sha384-BrhyAdmutBv+Vwj9hjVpHN3ytw8kGFB+imVs0UsUpelIjUzwpXeWNmK0JD0B3qGR" as="fetch" type="application/wasm"></head>
+<link rel="modulepreload" href="./gitcraft-8f940b0b58c4c082.js" crossorigin="anonymous" integrity="sha384-SOV/Z4K9XM7yjnWM4UyM+EOIGUPm9EAS5OlUtNiDa3oSWB1ph+bScfMfpcAk9nMR"><link rel="preload" href="./gitcraft-afcaa1759f21c91_bg.wasm" crossorigin="anonymous" integrity="sha384-NFq5lSIuHCaGL5FhWJFxM1S9TSrjD1dwA+qdppiu4uKTBM+eeZ5MO9f/iK1IxJMD" as="fetch" type="application/wasm"></head>
 <body>
     <div id="loading_msg">🦀 Cargando GitCraft WebAssembly...</div>
     <canvas id="gitcraft_canvas"></canvas>
