@@ -7,7 +7,7 @@ description = "Gestor completo de repositorios GitHub en Rust con cliente MCP"
 license = "MIT"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 eframe = { version = "0.29", default-features = false, features = ["accesskit", "default_fonts", "glow", "persistence"] }
