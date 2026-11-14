@@ -88,10 +88,19 @@ impl Default for GitCraftApp {
     }
 }
 
-fn spawn_task<F>(ctx: egui::Context, fut: F) where F: std::future::Future<Output = ()> + Send + 'static {
-    #[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn_task<F>(ctx: egui::Context, fut: F)
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     std::thread::spawn(move || { tokio::runtime::Runtime::new().unwrap().block_on(fut); ctx.request_repaint(); });
-    #[cfg(target_arch = "wasm32")]
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_task<F>(ctx: egui::Context, fut: F)
+where
+    F: std::future::Future<Output = ()> + 'static,
+{
     wasm_bindgen_futures::spawn_local(async move { fut.await; ctx.request_repaint(); });
 }
 
