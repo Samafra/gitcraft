@@ -2,19 +2,44 @@ use crate::app::GitCraftApp;
 use crate::mcp_client::McpTransport;
 use eframe::egui;
 
-// Dibuja la interfaz del Cliente MCP (tanto en la pestaña completa como en el panel lateral).
+// Dibuja la interfaz del Cliente MCP con desplegable de conexiones predefinidas + caja manual.
 pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
     ui.heading(app.i18n.t(lang, "mcp_panel_title"));
     ui.separator();
 
-    // Selector de transporte: Stdio (Claude/Codex local) o HTTP/SSE (Web/Remoto).
+    // Selector de transporte: Stdio (CLI local) o HTTP/JSON-RPC (Web/Remoto).
     ui.horizontal_wrapped(|ui| {
         ui.label(app.i18n.t(lang, "mcp_transport_label"));
         ui.selectable_value(&mut app.mcp_transport, McpTransport::Stdio, "Stdio (CLI)");
         ui.selectable_value(&mut app.mcp_transport, McpTransport::Http, "HTTP / JSON-RPC");
     });
 
+    // Desplegable con cadenas de conexión MCP habituales para no tener que recordarlas.
+    let presets: &[(&str, McpTransport, &str)] = &[
+        ("🦀 GitCraft (Modo Cargo Dev)", McpTransport::Stdio, "cargo run -- --mcp-server"),
+        ("🦀 GitCraft (Binario Release)", McpTransport::Stdio, "./target/release/gitcraft --mcp-server"),
+        ("🐙 GitHub MCP Oficial (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-github"),
+        ("📂 Archivos Locales /Users (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-filesystem /Users"),
+        ("🧠 Memoria Persistente (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-memory"),
+        ("🌐 Servidor HTTP Local (8080)", McpTransport::Http, "http://localhost:8080/mcp"),
+    ];
+
+    ui.horizontal(|ui| {
+        ui.label(app.i18n.t(lang, "mcp_presets_label"));
+        egui::ComboBox::from_id_salt("mcp_presets_combo")
+            .selected_text("Seleccionar servidor...")
+            .show_ui(ui, |ui| {
+                for (label, transport, cmd) in presets {
+                    if ui.selectable_label(app.mcp_endpoint == *cmd, *label).clicked() {
+                        app.mcp_transport = *transport;
+                        app.mcp_endpoint = (*cmd).to_string();
+                    }
+                }
+            });
+    });
+
+    // Caja de texto manual (se rellena sola al elegir del desplegable o permite escribir libremente).
     ui.add(
         egui::TextEdit::singleline(&mut app.mcp_endpoint)
             .desired_width(f32::INFINITY)
@@ -35,11 +60,10 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
             .show_ui(ui, |ui| {
                 for tool in &app.mcp_tools.clone() {
                     if ui.selectable_value(&mut app.mcp_selected_tool, tool.name.clone(), &tool.name).clicked() {
-                        // Si hay un repositorio activo, pre-rellenamos owner y repo automáticamente.
                         if let Some(repo) = &app.selected_repo {
                             let parts: Vec<&str> = repo.full_name.split('/').collect();
                             if parts.len() == 2 {
-                                app.mcp_tool_args = format!("{{\"owner\": \"{}\", \"repo\": \"{}\"}}", parts[0], parts[1]);
+                                app.mcp_tool_args = format!("{{\"owner\": \"{}\", \"repo\": \"{}\", \"full_name\": \"{}\"}}", parts[0], parts[1], repo.full_name);
                             }
                         }
                     }

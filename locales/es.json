@@ -53,5 +53,6 @@
   "mcp_args_label": "Argumentos JSON:",
   "mcp_run_tool_btn": "▶ Ejecutar Herramienta",
   "mcp_output_header": "Respuesta JSON-RPC del Servidor MCP:",
-  "mcp_web_stdio_note": "Nota: El modo Stdio (procesos locales) funciona en escritorio; en Web usa HTTP/SSE."
+  "mcp_web_stdio_note": "Nota: El modo Stdio (procesos locales) funciona en escritorio; en Web usa HTTP/SSE.",
+  "mcp_presets_label": "Preajustes rápidos:"
 }
