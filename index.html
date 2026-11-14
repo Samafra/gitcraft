@@ -6,9 +6,30 @@
     <title>GitCraft - GitHub & MCP Client</title>
     <link data-trunk rel="rust" data-bin="gitcraft" />
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #14161a; }
-        canvas { width: 100%; height: 100%; display: block; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #14161a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
     </style>
 </head>
-<body><canvas id="gitcraft_canvas"></canvas></body>
+<body>
+    <div id="loading_msg">🦀 Cargando GitCraft WebAssembly...</div>
+    <canvas id="gitcraft_canvas"></canvas>
+</body>
 </html>
