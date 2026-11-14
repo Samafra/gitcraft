@@ -6,6 +6,7 @@ use crate::mcp_client::{mcp_call_tool, mcp_discover_tools, McpTool, McpTransport
 use crate::ui_changes::render_changes_tab;
 use crate::ui_mcp::render_mcp_ui;
 use crate::ui_manage::{render_actions_tab, render_issues_tab, render_prs_tab, render_releases_tab};
+use crate::ui_repos::render_repos_tab;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -272,24 +273,7 @@ impl eframe::App for GitCraftApp {
                 return;
             }
             match self.active_tab {
-                ActiveTab::Repositories => {
-                    ui.horizontal(|ui| {
-                        ui.add(egui::TextEdit::singleline(&mut self.repo_filter).hint_text(self.i18n.t(lang, "repos_search_hint")));
-                        if ui.button(self.i18n.t(lang, "repos_refresh_btn")).clicked() { self.trigger_github_sync(ctx.clone()); }
-                        if ui.button(self.i18n.t(lang, "auth_disconnect_btn")).clicked() { self.user = None; self.repos.clear(); self.saved_token.clear(); }
-                    });
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        let filter = self.repo_filter.to_lowercase();
-                        for repo in self.repos.clone() {
-                            if !filter.is_empty() && !repo.full_name.to_lowercase().contains(&filter) { continue; }
-                            if ui.selectable_label(self.selected_repo.as_ref().map(|r| r.id == repo.id).unwrap_or(false), &repo.full_name).clicked() {
-                                self.selected_repo = Some(repo);
-                                self.active_tab = ActiveTab::Changes;
-                                self.load_branches_and_root(ctx.clone());
-                            }
-                        }
-                    });
-                }
+                ActiveTab::Repositories => render_repos_tab(self, ui, ctx),
                 ActiveTab::Changes => render_changes_tab(self, ui, ctx),
                 ActiveTab::PullRequests => render_prs_tab(self, ui, ctx),
                 ActiveTab::Issues => render_issues_tab(self, ui, ctx),

@@ -54,5 +54,10 @@
   "mcp_run_tool_btn": "▶ Run Tool",
   "mcp_output_header": "MCP Server JSON-RPC Response:",
   "mcp_web_stdio_note": "Note: Stdio mode (local processes) works on desktop; on Web use HTTP/SSE.",
-  "mcp_presets_label": "Quick presets:"
+  "mcp_presets_label": "Quick presets:",
+  "col_repo_name": "Repository name",
+  "col_visibility": "Public / Private",
+  "col_description": "Description",
+  "col_created_at": "Created date",
+  "col_updated_at": "Last updated"
 }

@@ -9,5 +9,6 @@ pub mod repo_ops;
 pub mod ui_changes;
 pub mod ui_manage;
 pub mod ui_mcp;
+pub mod ui_repos;
 
 pub use app::GitCraftApp;

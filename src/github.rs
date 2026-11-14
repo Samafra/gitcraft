@@ -27,6 +27,8 @@ pub struct GitHubRepo {
     pub stargazers_count: u32,
     pub open_issues_count: u32,
     pub language: Option<String>,
+    pub created_at: String, // Fecha de creación devuelta por GitHub (ISO 8601)
+    pub updated_at: String, // Fecha de última modificación devuelta por GitHub (ISO 8601)
 }
 
 // Función asíncrona que devuelve un Result<Éxito, Error>.
