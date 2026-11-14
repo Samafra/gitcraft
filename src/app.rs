@@ -14,6 +14,15 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActiveTab { Repositories, Changes, PullRequests, Issues, Actions, Releases, Mcp }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RepoSortColumn {
+    Name,
+    Visibility,
+    Description,
+    CreatedAt,
+    UpdatedAt,
+}
+
 pub enum AsyncEvent {
     UserAndRepos(Result<(GitHubUser, Vec<GitHubRepo>), String>),
     Branches(Result<Vec<GitBranch>, String>),
@@ -42,6 +51,8 @@ pub struct GitCraftApp {
     #[serde(skip)] pub repos: Vec<GitHubRepo>,
     #[serde(skip)] pub selected_repo: Option<GitHubRepo>,
     #[serde(skip)] pub repo_filter: String,
+    pub repo_sort_col: RepoSortColumn,
+    pub repo_sort_asc: bool,
     #[serde(skip)] pub branches: Vec<GitBranch>,
     #[serde(skip)] pub current_branch: String,
     #[serde(skip)] pub new_branch_name: String,
@@ -76,7 +87,7 @@ impl Default for GitCraftApp {
         Self {
             language: Language::Es, active_tab: ActiveTab::Repositories, dark_mode: true, show_mcp_sidebar: true,
             saved_token: String::new(), i18n: I18nManager::default(), is_loading: false, status_notice: None,
-            user: None, repos: Vec::new(), selected_repo: None, repo_filter: String::new(),
+            user: None, repos: Vec::new(), selected_repo: None, repo_filter: String::new(), repo_sort_col: RepoSortColumn::UpdatedAt, repo_sort_asc: false,
             branches: Vec::new(), current_branch: "main".into(), new_branch_name: String::new(),
             current_path: String::new(), dir_entries: Vec::new(), opened_file_path: None,
             opened_file_sha: String::new(), opened_file_content: String::new(), commit_message: String::new(),
