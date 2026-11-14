@@ -1,0 +1,67 @@
+name: Build GitCraft Multiplatform
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-desktop:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: GitCraft-Windows-x64.exe
+            bin: target/x86_64-pc-windows-msvc/release/gitcraft.exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: GitCraft-Linux-x64
+            bin: target/x86_64-unknown-linux-gnu/release/gitcraft
+          - os: macos-latest
+            target: universal-apple-darwin
+            artifact: GitCraft-macOS-Universal
+            bin: target/universal-apple-darwin/release/gitcraft
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux deps
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libgtk-3-dev
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin,aarch64-apple-darwin' || matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Desktop
+        run: |
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            cargo build --release --target x86_64-apple-darwin
+            cargo build --release --target aarch64-apple-darwin
+            mkdir -p target/universal-apple-darwin/release
+            lipo -create target/x86_64-apple-darwin/release/gitcraft target/aarch64-apple-darwin/release/gitcraft -output target/universal-apple-darwin/release/gitcraft
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.bin }}
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Trunk & Build Web
+        run: |
+          cargo install trunk
+          trunk build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GitCraft-Web-WASM
+          path: dist/
