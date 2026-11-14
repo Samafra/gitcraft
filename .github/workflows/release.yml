@@ -35,6 +35,7 @@ jobs:
           targets: ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin,aarch64-apple-darwin' || matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - name: Build Desktop
+        shell: bash
         run: |
           if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
             cargo build --release --target x86_64-apple-darwin
