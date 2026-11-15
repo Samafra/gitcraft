@@ -16,6 +16,7 @@ pub struct BranchCommit {
     pub sha: String,
 }
 
+// Representa un archivo o carpeta dentro de un repositorio junto con su último commit.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RepoEntry {
@@ -25,6 +26,9 @@ pub struct RepoEntry {
     #[serde(rename = "type")]
     pub entry_type: String,
     pub content: Option<String>,
+    pub last_commit_msg: String,  // Mensaje del último commit que tocó este archivo/carpeta
+    pub last_commit_hash: String, // Hash corto de 7 caracteres (ej. "a1b2c3d")
+    pub last_commit_date: String, // Fecha formateada del último commit (ej. "2026-11-15 00:40")
 }
 
 // Función auxiliar para codificar espacios y caracteres especiales en rutas/ramas de URL.
@@ -87,6 +91,35 @@ pub async fn create_branch(
     Ok(())
 }
 
+// Función auxiliar que consulta el último commit (mensaje, hash corto y fecha) de un archivo o carpeta.
+async fn enrich_with_last_commit(
+    client: reqwest::Client,
+    api_url: String,
+    repo_name: String,
+    branch: String,
+    mut item: RepoEntry,
+) -> RepoEntry {
+    let ep = encode_url_segment(&item.path);
+    let commit_url = format!("{}/repos/{}/commits?sha={}&path={}&per_page=1", api_url, repo_name, branch, ep);
+    if let Ok(r) = client.get(&commit_url).send().await {
+        if let Ok(vals) = r.json::<Vec<serde_json::Value>>().await {
+            if let Some(first) = vals.first() {
+                let full_sha = first["sha"].as_str().unwrap_or("");
+                item.last_commit_hash = full_sha.chars().take(7).collect();
+                let raw_msg = first["commit"]["message"].as_str().unwrap_or("-");
+                item.last_commit_msg = raw_msg.lines().next().unwrap_or("-").to_string();
+                let raw_date = first["commit"]["committer"]["date"].as_str().unwrap_or("");
+                item.last_commit_date = if raw_date.len() >= 16 {
+                    raw_date[..16].replace('T', " ")
+                } else {
+                    "-".to_string()
+                };
+            }
+        }
+    }
+    item
+}
+
 pub async fn fetch_directory(
     token: String,
     full_name: String,
@@ -103,16 +136,56 @@ pub async fn fetch_directory(
     };
 
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    // Si el repositorio está vacío (sin commits aún), devolvemos lista vacía sin mostrar error.
     if resp.status().as_u16() == 404 && path.is_empty() {
         return Ok(Vec::new());
     }
     if !resp.status().is_success() {
         return Err(format!("Error listando archivos ({}) en '{}'", resp.status(), path));
     }
+
     let mut entries = resp.json::<Vec<RepoEntry>>().await.map_err(|e| e.to_string())?;
+    // Ordenamos: primero carpetas ("dir"), luego archivos ("file") alfabéticamente.
     entries.sort_by(|a, b| b.entry_type.cmp(&a.entry_type).then(a.name.cmp(&b.name)));
-    Ok(entries)
+
+    // En Escritorio ejecutamos las peticiones en paralelo con tokio::spawn.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut handles = Vec::new();
+        for entry in entries {
+            handles.push(tokio::spawn(enrich_with_last_commit(
+                client.clone(),
+                api.clone(),
+                full_name.clone(),
+                clean_branch.clone(),
+                entry,
+            )));
+        }
+        let mut enriched = Vec::with_capacity(handles.len());
+        for h in handles {
+            if let Ok(item) = h.await {
+                enriched.push(item);
+            }
+        }
+        Ok(enriched)
+    }
+
+    // En WebAssembly (wasm32) ejecutamos las peticiones asíncronas directamente en el hilo del navegador.
+    #[cfg(target_arch = "wasm32")]
+    {
+        let mut enriched = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let item = enrich_with_last_commit(
+                client.clone(),
+                api.clone(),
+                full_name.clone(),
+                clean_branch.clone(),
+                entry,
+            )
+            .await;
+            enriched.push(item);
+        }
+        Ok(enriched)
+    }
 }
 
 pub async fn fetch_file_content(
