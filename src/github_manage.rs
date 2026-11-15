@@ -22,6 +22,13 @@ pub struct IssueItem {
     pub pull_request: Option<serde_json::Value>, // GitHub devuelve PRs dentro de /issues; si es Some, lo filtramos.
 }
 
+// Representa el usuario que disparó la ejecución del workflow.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkflowActor {
+    pub login: String,
+}
+
 // Estructura para representar una ejecución de GitHub Actions.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -31,6 +38,8 @@ pub struct WorkflowRunItem {
     pub status: String,             // "completed", "in_progress", "queued"
     pub conclusion: Option<String>, // Some("success"), Some("failure"), None
     pub head_branch: String,
+    pub created_at: String,         // Fecha de ejecución ISO 8601
+    pub actor: WorkflowActor,       // Usuario que ejecutó el workflow
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

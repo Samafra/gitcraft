@@ -59,5 +59,11 @@
   "col_visibility": "Público / Privado",
   "col_description": "Descripción",
   "col_created_at": "Fecha creación",
-  "col_updated_at": "Última modificación"
+  "col_updated_at": "Última modificación",
+  "col_act_status": "OK / KO",
+  "col_act_workflow": "Workflow",
+  "col_act_user": "Usuario",
+  "col_act_branch": "Rama",
+  "col_act_date": "Fecha",
+  "col_act_action": "Acción"
 }
