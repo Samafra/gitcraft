@@ -8,14 +8,39 @@ pub fn render_prs_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Cont
 
     ui.horizontal_wrapped(|ui| {
         ui.add(egui::TextEdit::singleline(&mut app.new_pr_title).hint_text(app.i18n.t(lang, "pr_new_title")));
+
+        // Desplegable de Rama origen (head)
         ui.label(app.i18n.t(lang, "pr_head_branch"));
-        ui.add(egui::TextEdit::singleline(&mut app.new_pr_head).desired_width(110.0));
+        egui::ComboBox::from_id_salt("pr_head_combo")
+            .selected_text(&app.new_pr_head)
+            .show_ui(ui, |ui| {
+                for b in &app.branches.clone() {
+                    ui.selectable_value(&mut app.new_pr_head, b.name.clone(), &b.name);
+                }
+            });
+
+        // Desplegable de Rama destino (base)
         ui.label(app.i18n.t(lang, "pr_base_branch"));
-        ui.add(egui::TextEdit::singleline(&mut app.new_pr_base).desired_width(110.0));
-        if ui.button(app.i18n.t(lang, "pr_create_btn")).clicked() && !app.new_pr_title.trim().is_empty() {
+        egui::ComboBox::from_id_salt("pr_base_combo")
+            .selected_text(&app.new_pr_base)
+            .show_ui(ui, |ui| {
+                for b in &app.branches.clone() {
+                    ui.selectable_value(&mut app.new_pr_base, b.name.clone(), &b.name);
+                }
+            });
+
+        // Solo permitimos crear el PR si hay título, ambas ramas están elegidas y son distintas entre sí
+        let can_create = !app.new_pr_title.trim().is_empty()
+            && !app.new_pr_head.is_empty()
+            && !app.new_pr_base.is_empty()
+            && app.new_pr_head != app.new_pr_base;
+
+        if ui.add_enabled(can_create, egui::Button::new(app.i18n.t(lang, "pr_create_btn"))).clicked() {
             app.trigger_create_pr(ctx.clone());
         }
-        if ui.button(app.i18n.t(lang, "refresh_list_btn")).clicked() { app.load_management(ctx.clone()); }
+        if ui.button(app.i18n.t(lang, "refresh_list_btn")).clicked() {
+            app.load_branches_and_root(ctx.clone());
+        }
     });
     ui.separator();
 

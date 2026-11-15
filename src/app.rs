@@ -222,7 +222,18 @@ impl eframe::App for GitCraftApp {
 
                 | AsyncEvent::FileLoaded(_, Err(e)) | AsyncEvent::CommitDone(Err(e)) | AsyncEvent::BranchCreated(Err(e))
                 | AsyncEvent::ManagementLoaded(Err(e)) | AsyncEvent::MgmtActionDone(Err(e)) => { self.status_notice = Some((e, true)); }
-                AsyncEvent::Branches(Ok(b)) => { self.branches = b; }
+                AsyncEvent::Branches(Ok(b)) => {
+                    // Si la rama origen aún no está elegida, preseleccionamos la primera rama distinta a la destino (o la primera disponible).
+                    if self.new_pr_head.is_empty() || !b.iter().any(|br| br.name == self.new_pr_head) {
+                        self.new_pr_head = b
+                            .iter()
+                            .find(|br| br.name != self.new_pr_base)
+                            .or_else(|| b.first())
+                            .map(|br| br.name.clone())
+                            .unwrap_or_default();
+                    }
+                    self.branches = b;
+                }
                 AsyncEvent::Directory(Ok(d)) => { self.dir_entries = d; }
                 AsyncEvent::FileLoaded(p, Ok((txt, sha))) => { self.opened_file_path = Some(p); self.opened_file_content = txt; self.opened_file_sha = sha; }
                 AsyncEvent::CommitDone(Ok(s)) => { self.opened_file_sha = s; self.commit_message.clear(); self.status_notice = Some((self.i18n.t(self.language, "commit_success").into(), false)); }
