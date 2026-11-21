@@ -73,6 +73,24 @@ fases posteriores y requieren controles específicos.
 - locales/es.json y locales/en.json: traducciones.
 - scripts/validar_e3b_local.sh: validación sin GitHub Actions.
 
+## Verificación preparatoria en repositorios temporales
+
+Antes de solicitar la compilación en macOS se ejecutaron directamente comandos
+Git en un repositorio temporal Linux, confirmando que:
+
+- Git crea una rama y una etiqueta ligera en los SHA elegidos.
+- La rama activa y los archivos de trabajo permanecen intactos.
+- Git rechaza la creación de otra rama o etiqueta con el mismo nombre.
+- El comando de creación con hooks deshabilitados no ejecuta el hook
+  `reference-transaction` configurado en el repositorio temporal.
+- `git ls-files --modified --others` permite enumerar archivos de trabajo
+  modificados o nuevos, y `git hash-object --no-filters` distingue sus
+  versiones de contenido sin escribir objetos.
+
+También se revisaron la estructura de los archivos Rust y la paridad de
+traducciones ES/EN. **Esto no prueba que el código Rust compile en macOS,
+ni sustituye las pruebas automáticas y visuales que aún faltan.**
+
 ## 1. Validación automática en macOS Intel
 
 Con GitCraft cerrado:
