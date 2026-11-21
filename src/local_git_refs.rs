@@ -465,6 +465,40 @@ mod tests {
         assert!(fixture.git(&["tag", "--list", "sin-cambio"]).is_empty());
     }
 
+    /// La creación no debe ejecutar hooks externos configurados por el repo.
+    ///
+    /// El script ficticio sólo escribiría un archivo dentro del fixture. Si
+    /// el motor deja de deshabilitar los hooks, el test lo detecta sin tocar
+    /// ningún repositorio real ni iniciar conexiones de red.
+    #[cfg(unix)]
+    #[test]
+    fn creating_branch_does_not_execute_custom_hooks() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let fixture = Fixture::new();
+        let hooks = fixture.root.join("hooks-e3b");
+        std::fs::create_dir(&hooks).unwrap();
+        let script = hooks.join("reference-transaction");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nprintf 'ejecutado' > hook-ejecutado.txt\n",
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&script).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script, permissions).unwrap();
+        let hooks_path = hooks.to_str().unwrap();
+        fixture.git(&["config", "core.hooksPath", hooks_path]);
+
+        let preview = preview_ref(
+            &fixture.root,
+            fixture.action(RefKind::Branch, "sin-hooks"),
+        )
+        .unwrap();
+        execute_ref(&preview).unwrap();
+        assert!(!fixture.root.join("hook-ejecutado.txt").exists());
+    }
+
     /// Crear otra referencia mientras se revisa invalida la confirmación.
     #[test]
     fn changed_refs_reject_stale_preview() {
