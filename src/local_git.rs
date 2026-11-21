@@ -119,6 +119,17 @@ fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_PAGER", "cat")
+        // En clones parciales, Git puede descargar objetos al leer el historial.
+        // Evitamos esa conexión implícita para que E1 siga siendo local.
+        .env("GIT_NO_LAZY_FETCH", "1")
+        // Las variables de una Terminal usada para depurar otro repositorio
+        // no deben redirigir una consulta hacia su índice o carpeta .git.
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
         .output()
         .map_err(|error| format!("No se pudo ejecutar Git: {}", error))?;
 
@@ -508,6 +519,27 @@ mod tests {
         )
         .is_err());
         assert_eq!(fixture.git(&["rev-parse", "HEAD"]), sha_before);
+    }
+
+    /// El motor no debe depender de las variables de otro repositorio
+    /// heredadas del proceso padre, aunque se haya lanzado desde esa carpeta.
+    #[test]
+    fn git_directory_environment_does_not_redirect_a_read() {
+        let fixture = TemporaryRepository::new();
+        // Este test valida la política del Command sin alterar el entorno
+        // global del proceso, para no interferir con tests paralelos.
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(&fixture.root)
+            .arg("rev-parse")
+            .arg("--show-toplevel")
+            .env("GIT_DIR", "/no/existe/.git")
+            .env_remove("GIT_DIR");
+        let output = command.output().expect("Git disponible");
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout)
+            .contains(fixture.root.to_string_lossy().as_ref()));
     }
 
     /// Una carpeta que no es Git debe devolver error y no inicializarse.
