@@ -142,7 +142,7 @@ pub fn preview_action(root: &Path, action: LocalAction) -> Result<LocalActionPre
                 _ => {}
             }
 
-            if matches!(action, LocalAction::Unstage(_))
+            if matches!(&action, LocalAction::Unstage(_))
                 && run_git(Some(&path), &["rev-parse", "--verify", "HEAD"]).is_err()
             {
                 return Err(
@@ -152,17 +152,17 @@ pub fn preview_action(root: &Path, action: LocalAction) -> Result<LocalActionPre
             }
 
             file_hash = current_file_hash(&path, file)?;
-            let mode = if matches!(action, LocalAction::Stage(_)) {
+            let mode = if matches!(&action, LocalAction::Stage(_)) {
                 "Preparar"
             } else {
                 "Retirar de staging"
             };
-            let detail = if matches!(action, LocalAction::Stage(_)) && entry.code == "??" {
+            let detail = if matches!(&action, LocalAction::Stage(_)) && entry.code == "??" {
                 "Archivo no seguido: se preparará el archivo completo. Git diff no muestra \
                  su contenido antes de añadirlo."
                     .to_string()
             } else {
-                let args = if matches!(action, LocalAction::Stage(_)) {
+                let args = if matches!(&action, LocalAction::Stage(_)) {
                     vec![
                         "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--", file,
                     ]
