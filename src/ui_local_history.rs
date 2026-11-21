@@ -375,6 +375,7 @@ pub fn render_ref_creation_panel(
     ctx: &egui::Context,
     overview: &GitHistoryOverview,
     can_query: bool,
+    kind: RefKind,
 ) {
     let lang = app.language;
     ui.group(|ui| {
@@ -394,22 +395,15 @@ pub fn render_ref_creation_panel(
         // está consultando o creando una referencia para este panel.
         let mut changed = false;
         ui.add_enabled_ui(!app.history.ref_loading, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                changed |= ui
-                    .selectable_value(
-                        &mut app.history.ref_kind,
-                        RefKind::Branch,
-                        app.i18n.t(lang, "e3b_branch"),
-                    )
-                    .changed();
-                changed |= ui
-                    .selectable_value(
-                        &mut app.history.ref_kind,
-                        RefKind::Tag,
-                        app.i18n.t(lang, "e3b_tag"),
-                    )
-                    .changed();
-            });
+            // El tipo se elige desde la barra lateral, no con otro selector
+            // dentro del formulario. Ramas nunca creará una etiqueta por
+            // accidente, ni Etiquetas creará una rama.
+            let kind_key = if kind == RefKind::Branch {
+                "e3b_branch"
+            } else {
+                "e3b_tag"
+            };
+            ui.label(app.i18n.t(lang, kind_key));
             ui.horizontal_wrapped(|ui| {
                 ui.label(app.i18n.t(lang, "e3b_name"));
                 changed |= ui
