@@ -21,15 +21,21 @@ pub fn render_changes_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::
             .show_ui(ui, |ui| {
                 for b in &app.branches.clone() {
                     if ui.selectable_value(&mut app.current_branch, b.name.clone(), &b.name).clicked() {
+                        // La petición anterior y el editor ya no pertenecen a esta rama.
                         app.current_path.clear();
                         app.opened_file_path = None;
+                        app.opened_file_sha.clear();
+                        app.opened_file_content.clear();
+                        app.file_request = None;
                         app.load_directory(ctx.clone());
                     }
                 }
             });
 
         if ui.button("🔄").clicked() {
-            app.load_branches_and_root(ctx.clone());
+            // Refrescar no debe mover el usuario a la rama predeterminada.
+            app.refresh_branches(ctx.clone());
+            app.load_directory(ctx.clone());
         }
 
         ui.separator();
@@ -55,6 +61,7 @@ pub fn render_changes_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::
                         app.opened_file_path = None;
                         app.opened_file_content.clear();
                         app.opened_file_sha.clear();
+                        app.file_request = None;
                     }
                 });
             });
