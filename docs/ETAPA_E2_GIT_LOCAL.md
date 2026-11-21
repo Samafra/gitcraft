@@ -108,7 +108,7 @@ Abrir la aplicación con cargo run --locked, entrar en Git local sin token y abr
 7. Introducir el mensaje Prueba local E2 y pulsar Vista previa del commit.
 8. Comprobar rama, mensaje y cantidad de archivos antes de confirmar.
 9. Confirmar: el historial muestra el nuevo commit local y no hay push.
-10. Si se cambia un archivo después de ver la vista previa y antes de confirmar, debe rechazarse la operación.
+10. Para verificar una confirmación obsoleta, modifica de nuevo ejemplo.txt en el repositorio temporal desde Terminal, vuelve a abrirlo o actualízalo en GitCraft y pulsa Preparar para generar su vista previa. Sin confirmar todavía, añade otra línea al mismo archivo desde Terminal. Al pulsar Confirmar operación, GitCraft debe rechazarla sin preparar esa nueva versión.
 
 Contrastar en Terminal:
 
