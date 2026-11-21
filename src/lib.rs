@@ -11,6 +11,9 @@ pub mod local_git_actions;
 // E3-A consulta historia avanzada y recuperación de referencias sin escribir.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod local_git_history;
+// E3-B crea referencias locales con vista previa, sin alterar HEAD ni archivos.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod local_git_refs;
 pub mod mcp_client;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mcp_server;
