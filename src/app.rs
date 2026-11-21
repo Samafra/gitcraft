@@ -14,6 +14,10 @@ use crate::i18n::{I18nManager, Language};
 // Las funciones de Git local sólo se compilan en escritorio (macOS/Linux/Windows).
 #[cfg(not(target_arch = "wasm32"))]
 use crate::local_git::{inspect_repository, read_diff, LocalDiffTarget, LocalRepository};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::local_git_actions::{
+    execute_confirmed_action, preview_action, LocalAction, LocalActionPreview,
+};
 use crate::mcp_client::{mcp_call_tool, mcp_discover_tools, McpTool, McpTransport};
 use crate::repo_ops::{
     commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content,
@@ -85,6 +89,12 @@ pub enum AsyncEvent {
     LocalRepositoryLoaded(u64, Result<LocalRepository, String>),
     #[cfg(not(target_arch = "wasm32"))]
     LocalDiffLoaded(u64, Result<String, String>),
+    /// E2: vista previa sin escritura, identificada por su generación.
+    #[cfg(not(target_arch = "wasm32"))]
+    LocalActionPreviewLoaded(u64, Result<LocalActionPreview, String>),
+    /// E2: resultado de una acción confirmada con actualización de datos.
+    #[cfg(not(target_arch = "wasm32"))]
+    LocalActionFinished(u64, LocalAction, Result<LocalRepository, String>),
 }
 
 /// Estado general de GitCraft: preferencias, sesión y datos que utiliza la interfaz.
@@ -194,6 +204,22 @@ pub struct GitCraftApp {
     #[cfg(not(target_arch = "wasm32"))]
     #[serde(skip)]
     local_diff_generation: u64,
+    // E2 no conserva acciones pendientes ni mensajes de commit en preferencias.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_action_preview: Option<LocalActionPreview>,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_action_loading: bool,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_action_notice: Option<String>,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_commit_message: String,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    local_action_generation: u64,
     // Identificadores de las peticiones más recientes; pertenecen sólo a esta sesión.
     #[serde(skip)]
     pub request_generation: u64,
@@ -279,6 +305,16 @@ impl Default for GitCraftApp {
             local_generation: 0,
             #[cfg(not(target_arch = "wasm32"))]
             local_diff_generation: 0,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_action_preview: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_action_loading: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_action_notice: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_commit_message: String::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            local_action_generation: 0,
             request_generation: 0,
             auth_generation: 0,
             branches_request: None,
@@ -398,6 +434,10 @@ impl GitCraftApp {
     pub fn open_local_repository(&mut self, ctx: egui::Context) {
         self.local_generation = self.local_generation.wrapping_add(1);
         self.local_diff_generation = self.local_diff_generation.wrapping_add(1);
+        self.local_action_generation = self.local_action_generation.wrapping_add(1);
+        self.local_action_preview = None;
+        self.local_action_notice = None;
+        self.local_action_loading = false;
         self.local_loading = true;
         self.local_diff_loading = false;
         self.local_error = None;
@@ -446,6 +486,75 @@ impl GitCraftApp {
         spawn_task(ctx, async move {
             let result = read_diff(&root, &target);
             let _ = tx.send(AsyncEvent::LocalDiffLoaded(generation, result));
+        });
+    }
+
+    /// E2: prepara una vista previa sin ejecutar ninguna escritura Git.
+    ///
+    /// Se utiliza la ruta de la selección actual y se anulan previews anteriores.
+    /// El identificador evita aplicar respuestas de otro repositorio.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn preview_local_action(&mut self, ctx: egui::Context, action: LocalAction) {
+        let Some(repository) = &self.local_repository else {
+            return;
+        };
+        if self.local_loading || self.local_action_loading {
+            return;
+        }
+        let root = repository.root.clone();
+        let tx = self.tx.clone().unwrap();
+        self.local_action_generation = self.local_action_generation.wrapping_add(1);
+        let generation = self.local_action_generation;
+        self.local_action_loading = true;
+        self.local_action_preview = None;
+        self.local_action_notice = None;
+        self.local_error = None;
+        spawn_task(ctx, async move {
+            let result = preview_action(&root, action);
+            let _ = tx.send(AsyncEvent::LocalActionPreviewLoaded(generation, result));
+        });
+    }
+
+    /// E2: descarta una autorización no ejecutada sin tocar el repositorio.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn cancel_local_action(&mut self) {
+        self.local_action_generation = self.local_action_generation.wrapping_add(1);
+        self.local_action_preview = None;
+        self.local_action_loading = false;
+    }
+
+    /// E2: ejecuta una operación solamente tras confirmar su vista previa.
+    ///
+    /// El motor comprueba que índice, HEAD y archivos no hayan cambiado desde
+    /// el preview. Si cambiaron, devuelve un error y no hace la escritura.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn confirm_local_action(&mut self, ctx: egui::Context) {
+        if self.local_action_loading || self.local_loading {
+            return;
+        }
+        let Some(preview) = self.local_action_preview.take() else {
+            return;
+        };
+        let current_root = self.local_repository.as_ref().map(|repo| &repo.root);
+        if current_root != Some(&preview.root) {
+            self.local_error = Some("El repositorio ha cambiado; revisa de nuevo.".into());
+            return;
+        }
+        if let LocalAction::Commit(message) = &preview.action {
+            if message != self.local_commit_message.trim() {
+                self.local_error = Some("El mensaje cambió; genera otra vista previa.".into());
+                return;
+            }
+        }
+        let action = preview.action.clone();
+        let tx = self.tx.clone().unwrap();
+        self.local_action_generation = self.local_action_generation.wrapping_add(1);
+        let generation = self.local_action_generation;
+        self.local_action_loading = true;
+        self.local_error = None;
+        spawn_task(ctx, async move {
+            let result = execute_confirmed_action(&preview);
+            let _ = tx.send(AsyncEvent::LocalActionFinished(generation, action, result));
         });
     }
 
@@ -935,6 +1044,57 @@ impl eframe::App for GitCraftApp {
                     self.local_diff_loading = false;
                     match result {
                         Ok(diff) => self.local_diff_text = diff,
+                        Err(error) => self.local_error = Some(error),
+                    }
+                }
+                // E2: sólo el último preview de la carpeta activa puede mostrarse.
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::LocalActionPreviewLoaded(generation, result) => {
+                    if generation != self.local_action_generation {
+                        continue;
+                    }
+                    self.local_action_loading = false;
+                    match result {
+                        Ok(preview) => {
+                            if self.local_repository.as_ref().map(|repo| &repo.root)
+                                == Some(&preview.root)
+                            {
+                                self.local_action_preview = Some(preview);
+                            }
+                        }
+                        Err(error) => self.local_error = Some(error),
+                    }
+                }
+                // Tras una acción confirmada se recargan los datos ya devueltos.
+                // También se invalidan diffs anteriores al nuevo índice.
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::LocalActionFinished(generation, action, result) => {
+                    if generation != self.local_action_generation {
+                        continue;
+                    }
+                    self.local_action_loading = false;
+                    self.local_action_preview = None;
+                    match result {
+                        Ok(repository) => {
+                            self.local_diff_generation =
+                                self.local_diff_generation.wrapping_add(1);
+                            self.local_diff_loading = false;
+                            self.local_diff_target = None;
+                            self.local_diff_text.clear();
+                            self.local_repository = Some(repository);
+                            self.local_action_notice = Some(match action {
+                                LocalAction::Stage(path) => format!("Archivo preparado: {}", path),
+                                LocalAction::Unstage(path) => {
+                                    format!("Retirado del índice, sin borrar el archivo: {}", path)
+                                }
+                                LocalAction::Commit(_) => {
+                                    self.local_commit_message.clear();
+                                    "Commit local creado; no se ha enviado a ningún remoto."
+                                        .into()
+                                }
+                            });
+                            self.local_error = None;
+                        }
                         Err(error) => self.local_error = Some(error),
                     }
                 }
