@@ -212,7 +212,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("puerto de pruebas");
         let address = listener.local_addr().expect("dirección de pruebas");
         let response = format!(
-            "HTTP/1.1 {}\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+            "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             status,
             body.len(),
             body,
