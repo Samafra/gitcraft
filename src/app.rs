@@ -526,7 +526,7 @@ impl GitCraftApp {
         let Some(repository) = &self.local_repository else {
             return;
         };
-        if self.local_loading || self.local_action_loading {
+        if self.local_loading || self.local_action_loading || self.history.ref_loading {
             return;
         }
         let root = repository.root.clone();
@@ -557,7 +557,7 @@ impl GitCraftApp {
     /// el preview. Si cambiaron, devuelve un error y no hace la escritura.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn confirm_local_action(&mut self, ctx: egui::Context) {
-        if self.local_action_loading || self.local_loading {
+        if self.local_action_loading || self.local_loading || self.history.ref_loading {
             return;
         }
         let Some(preview) = self.local_action_preview.take() else {
@@ -595,7 +595,11 @@ impl GitCraftApp {
         let Some(repository) = &self.local_repository else {
             return;
         };
-        if self.local_loading || self.local_action_loading || self.history.loading {
+        if self.local_loading
+            || self.local_action_loading
+            || self.history.loading
+            || self.history.ref_loading
+        {
             return;
         }
         let root = repository.root.clone();
@@ -619,7 +623,11 @@ impl GitCraftApp {
         let Some(repository) = &self.local_repository else {
             return;
         };
-        if self.local_loading || self.local_action_loading || self.history.detail_loading {
+        if self.local_loading
+            || self.local_action_loading
+            || self.history.detail_loading
+            || self.history.ref_loading
+        {
             return;
         }
         let Some(overview) = &self.history.overview else {
