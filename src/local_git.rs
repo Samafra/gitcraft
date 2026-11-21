@@ -1,0 +1,530 @@
+//! Motor Git local de E1: inspección sin operaciones de escritura.
+//!
+//! Este módulo funciona únicamente en aplicaciones de escritorio. Ejecuta el Git
+//! instalado por el usuario y utiliza argumentos separados, nunca un intérprete
+//! de comandos. Así, una ruta con espacios o caracteres especiales no se ejecuta
+//! accidentalmente como una instrucción del sistema.
+//!
+//! E1 permite ver el estado, las ramas, el historial y los diffs. No contiene
+//! comandos que creen commits, cambien ramas, borren archivos o publiquen datos.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+/// Número máximo de caracteres mostrados en un diff para no saturar la interfaz.
+const MAX_DIFF_CHARS: usize = 160_000;
+
+/// Estado de un archivo obtenido de Git en formato porcelain v1.
+///
+/// Los dos caracteres de "code" representan el índice (staging) y el árbol de
+/// trabajo, respectivamente. "??" identifica archivos que Git todavía no sigue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalFileStatus {
+    /// Código Git de dos caracteres, por ejemplo " M", "M " o "??".
+    pub code: String,
+    /// Ruta relativa al repositorio, que puede contener espacios o Unicode.
+    pub path: String,
+    /// Ruta anterior si el archivo fue renombrado o copiado.
+    pub original_path: Option<String>,
+}
+
+/// Referencia local o remota: una rama visible, nunca una orden de checkout.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalBranch {
+    /// Nombre completo sin el prefijo refs/heads o refs/remotes.
+    pub name: String,
+    /// Verdadero si procede de refs/remotes.
+    pub remote: bool,
+    /// Identificador del commit al que apunta la rama.
+    pub commit: String,
+}
+
+/// Datos básicos de un commit para mostrar el historial sin modificarlo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalCommit {
+    /// SHA completo; sólo se usará como argumento después de validarlo.
+    pub sha: String,
+    /// Versión abreviada del SHA que cabe en una tabla.
+    pub short_sha: String,
+    /// Autor tal como lo registra el commit.
+    pub author: String,
+    /// Fecha proporcionada por Git en formato ISO 8601.
+    pub date: String,
+    /// Primera línea del mensaje del commit.
+    pub subject: String,
+}
+
+/// Fotografía de un repositorio en el instante en que se ha consultado.
+/// Es información en memoria; no se persiste en preferencias ni archivos.
+#[derive(Debug, Clone)]
+pub struct LocalRepository {
+    /// Ruta absoluta del directorio raíz del trabajo Git.
+    pub root: PathBuf,
+    /// Versión del binario Git usado.
+    pub git_version: String,
+    /// Rama actual o indicación de HEAD separado.
+    pub head: String,
+    /// Archivos cambiados y no seguidos, tanto preparados como sin preparar.
+    pub status: Vec<LocalFileStatus>,
+    /// Ramas locales y referencias remotas disponibles.
+    pub branches: Vec<LocalBranch>,
+    /// Hasta 50 commits recientes.
+    pub commits: Vec<LocalCommit>,
+}
+
+/// Define qué diferencia se quiere consultar sin modificar el repositorio.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LocalDiffTarget {
+    /// Cambios del directorio de trabajo respecto al índice.
+    WorkingTree,
+    /// Cambios preparados en el índice respecto a HEAD.
+    Staged,
+    /// Cambios introducidos por un commit concreto de los del historial.
+    Commit(String),
+}
+
+/// Devuelve la versión del Git instalado o un error claro si no se encuentra.
+///
+/// Result es un tipo de Rust que devuelve Ok(valor) cuando todo funciona
+/// y Err(mensaje) cuando hay un problema. No se requiere autenticación GitHub.
+pub fn detect_git() -> Result<String, String> {
+    let output = run_git(None, &["--version"])?;
+    Ok(String::from_utf8_lossy(&output).trim().to_string())
+}
+
+/// Ejecuta exclusivamente un comando Git de consulta y devuelve sus bytes.
+///
+/// No se utiliza "sh -c", "cmd /C", ni ninguna expansión de shell: cada
+/// argumento es un valor independiente. Se desactiva fsmonitor, que en ciertas
+/// configuraciones podría lanzar procesos externos, y los bloqueos opcionales
+/// que el comando status puede emplear para actualizar el índice.
+///
+/// La lista de argumentos sólo la construyen las funciones de este módulo,
+/// nunca es un texto arbitrario introducido por la persona usuaria.
+fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
+    let mut command = Command::new("git");
+    command
+        .arg("--no-optional-locks")
+        .arg("-c")
+        .arg("core.fsmonitor=false");
+
+    // -C acepta la ruta como un solo argumento, aunque contenga espacios.
+    if let Some(directory) = repo {
+        command.arg("-C").arg(directory);
+    }
+
+    // No lanzar paginadores ni pedir contraseñas durante operaciones locales.
+    let output = command
+        .args(args)
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_PAGER", "cat")
+        .output()
+        .map_err(|error| format!("No se pudo ejecutar Git: {}", error))?;
+
+    if !output.status.success() {
+        let message = String::from_utf8_lossy(&output.stderr);
+        let detail = message.trim();
+        return Err(if detail.is_empty() {
+            format!("Git devolvió el estado {}.", output.status)
+        } else {
+            format!("Git: {}", detail)
+        });
+    }
+    Ok(output.stdout)
+}
+
+/// Interpreta el prefijo ~/ de macOS/Linux sin recurrir a un shell.
+///
+/// No permite ejecutar comandos ni expandir variables arbitrarias. En Windows
+/// también se admite la barra invertida después de ~ cuando USERPROFILE existe.
+fn expand_home(input: &str) -> PathBuf {
+    let value = input.trim();
+    if value == "~" || value.starts_with("~/") || value.starts_with("~\\") {
+        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+        if let Some(home) = home {
+            let mut path = PathBuf::from(home);
+            let remainder = value.trim_start_matches('~').trim_start_matches(['/', '\\']);
+            path.push(remainder);
+            return path;
+        }
+    }
+    PathBuf::from(value)
+}
+
+/// Abre una carpeta Git local y construye su información de sólo lectura.
+///
+/// La ruta se normaliza para rechazar errores de carpeta y para que el motor
+/// trabaje desde la raíz, incluso si se abre una subcarpeta del repositorio.
+/// Los subprocesos de Git sólo leen; ninguna operación envía datos a GitHub.
+pub fn inspect_repository(input: &str) -> Result<LocalRepository, String> {
+    if input.trim().is_empty() {
+        return Err("Escribe la ruta de una carpeta Git local.".into());
+    }
+    let directory = expand_home(input)
+        .canonicalize()
+        .map_err(|error| format!("No se puede abrir esa carpeta: {}", error))?;
+    if !directory.is_dir() {
+        return Err("La ruta indicada no es una carpeta.".into());
+    }
+
+    // Se rechazan repositorios bare: E1 necesita un directorio de trabajo.
+    let inside = run_git(Some(&directory), &["rev-parse", "--is-inside-work-tree"])?;
+    if inside != b"true\n" && inside != b"true\r\n" {
+        return Err("E1 necesita un repositorio Git con directorio de trabajo.".into());
+    }
+    let root_bytes = run_git(Some(&directory), &["rev-parse", "--show-toplevel"])?;
+    let root = PathBuf::from(String::from_utf8_lossy(&root_bytes).trim());
+    if !root.is_dir() {
+        return Err("Git no ha devuelto una carpeta raíz válida.".into());
+    }
+
+    let head_bytes = run_git(Some(&root), &["branch", "--show-current"])?;
+    let current = String::from_utf8_lossy(&head_bytes);
+    let head = if current.trim().is_empty() {
+        "(HEAD separado)".to_string()
+    } else {
+        current.trim().to_string()
+    };
+
+    // Los nombres de archivo vienen delimitados por NUL, para soportar
+    // espacios, comillas y nombres con saltos de línea sin romper el parseo.
+    let status = parse_status(&run_git(
+        Some(&root),
+        &["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
+    )?)?;
+
+    // Git no consulta la red al mostrar refs/remotes: son referencias locales.
+    let branches = parse_branches(&run_git(
+        Some(&root),
+        &[
+            "for-each-ref",
+            "--format=%(refname)%00%(objectname)",
+            "refs/heads",
+            "refs/remotes",
+        ],
+    )?);
+
+    // Un repositorio recién inicializado puede no contener todavía commits.
+    // En ese caso mostramos un historial vacío en lugar de un error falso.
+    let commits = if run_git(Some(&root), &["rev-parse", "--verify", "HEAD"]).is_ok() {
+        parse_commits(&run_git(
+            Some(&root),
+            &[
+                "log",
+                "--max-count=50",
+                "--date=iso-strict",
+                "--format=%H%x00%h%x00%an%x00%ad%x00%s%x00",
+            ],
+        )?)?
+    } else {
+        Vec::new()
+    };
+
+    Ok(LocalRepository {
+        root,
+        git_version: detect_git()?,
+        head,
+        status,
+        branches,
+        commits,
+    })
+}
+
+/// Convierte los bytes del estado porcelain -z en archivos individuales.
+///
+/// Con -z, Git pone primero la ruta nueva y luego la anterior al renombrar:
+/// ambas se leen como elementos consecutivos separados por byte cero.
+fn parse_status(bytes: &[u8]) -> Result<Vec<LocalFileStatus>, String> {
+    let mut pieces = bytes.split(|byte| *byte == 0).filter(|p| !p.is_empty());
+    let mut result = Vec::new();
+
+    while let Some(entry) = pieces.next() {
+        if entry.len() < 4 || entry[2] != b' ' {
+            return Err("La salida de git status no tiene el formato esperado.".into());
+        }
+        let code = String::from_utf8_lossy(&entry[..2]).into_owned();
+        let path = String::from_utf8_lossy(&entry[3..]).into_owned();
+
+        // Renombrar y copiar incluye una segunda ruta en el protocolo -z.
+        let original_path = if entry[..2].iter().any(|value| matches!(*value, b'R' | b'C')) {
+            let previous = pieces
+                .next()
+                .ok_or("Falta la ruta original de un archivo renombrado.")?;
+            Some(String::from_utf8_lossy(previous).into_owned())
+        } else {
+            None
+        };
+
+        result.push(LocalFileStatus {
+            code,
+            path,
+            original_path,
+        });
+    }
+    Ok(result)
+}
+
+/// Lee ramas locales y remotas desde refname; no consulta servidores remotos.
+fn parse_branches(bytes: &[u8]) -> Vec<LocalBranch> {
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .filter_map(|line| {
+            let (reference, commit) = line.split_once('\0')?;
+            let (name, remote) = if let Some(name) = reference.strip_prefix("refs/heads/") {
+                (name, false)
+            } else if let Some(name) = reference.strip_prefix("refs/remotes/") {
+                (name, true)
+            } else {
+                return None;
+            };
+
+            // origin/HEAD es un alias simbólico, no una rama independiente.
+            if remote && name.ends_with("/HEAD") {
+                return None;
+            }
+            Some(LocalBranch {
+                name: name.to_string(),
+                remote,
+                commit: commit.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// Convierte las líneas del historial con campos separados por byte NUL.
+///
+/// Los cinco campos se generan con --format, sin confiar en el idioma ni en
+/// los separadores elegidos por el usuario en su configuración personal.
+fn parse_commits(bytes: &[u8]) -> Result<Vec<LocalCommit>, String> {
+    let mut commits = Vec::new();
+    for line in bytes.split(|byte| *byte == b'\n').filter(|line| !line.is_empty()) {
+        let fields: Vec<&[u8]> = line.split(|byte| *byte == 0).collect();
+        if fields.len() < 5 {
+            return Err("La salida del historial Git es incompleta.".into());
+        }
+        let value = |index| String::from_utf8_lossy(fields[index]).into_owned();
+        commits.push(LocalCommit {
+            sha: value(0),
+            short_sha: value(1),
+            author: value(2),
+            date: value(3),
+            subject: value(4),
+        });
+    }
+    Ok(commits)
+}
+
+/// Obtiene un diff de trabajo, de staging o de un commit de historial.
+///
+/// Los commits se validan como SHA hexadecimales antes de dárselos a Git;
+/// nunca se interpreta la entrada como opciones ni como un comando externo.
+/// La salida larga se recorta para no congelar la interfaz gráfica.
+pub fn read_diff(root: &Path, target: &LocalDiffTarget) -> Result<String, String> {
+    let bytes = match target {
+        LocalDiffTarget::WorkingTree => run_git(
+            Some(root),
+            &["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--"],
+        )?,
+        LocalDiffTarget::Staged => run_git(
+            Some(root),
+            &["diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color", "--"],
+        )?,
+        LocalDiffTarget::Commit(sha) => {
+            if !(sha.len() == 40 || sha.len() == 64)
+                || !sha.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err("El identificador del commit no es un SHA válido.".into());
+            }
+            run_git(
+                Some(root),
+                &[
+                    "show",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--no-color",
+                    "--format=medium",
+                    sha,
+                    "--",
+                ],
+            )?
+        }
+    };
+    let content = String::from_utf8_lossy(&bytes);
+    let mut output: String = content.chars().take(MAX_DIFF_CHARS).collect();
+    if content.chars().count() > MAX_DIFF_CHARS {
+        output.push_str("\n\n[Diff truncado para proteger la interfaz]");
+    }
+    Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// Contador que evita que dos pruebas creen la misma carpeta temporal.
+    static NEXT_TEST: AtomicU64 = AtomicU64::new(0);
+
+    /// Repositorio de prueba creado en el directorio temporal del sistema.
+    /// No utiliza ni modifica repositorios existentes del usuario.
+    struct TemporaryRepository {
+        root: PathBuf,
+    }
+
+    impl TemporaryRepository {
+        /// Crea una carpeta nueva y una rama main, con un commit inicial ficticio.
+        fn new() -> Self {
+            let id = NEXT_TEST.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "gitcraft-e1-{}-{}-{}",
+                std::process::id(),
+                id,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("reloj disponible")
+                    .as_nanos()
+            ));
+            std::fs::create_dir(&root).expect("carpeta temporal creada");
+            let fixture = Self { root };
+            fixture.git(&["init", "-q"]);
+            fixture.git(&["symbolic-ref", "HEAD", "refs/heads/main"]);
+            std::fs::write(fixture.root.join("archivo.txt"), "primera línea\n")
+                .expect("archivo de prueba");
+            fixture.git(&["add", "archivo.txt"]);
+            fixture.git(&[
+                "-c",
+                "user.name=GitCraft test",
+                "-c",
+                "user.email=gitcraft@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "-m",
+                "Primer commit",
+            ]);
+            fixture
+        }
+
+        /// Ejecuta operaciones de preparación únicamente dentro del fixture.
+        /// El motor real de E1 nunca utiliza esta función ni escribe archivos.
+        fn git(&self, args: &[&str]) -> Vec<u8> {
+            let result = Command::new("git")
+                .arg("-C")
+                .arg(&self.root)
+                .args(args)
+                .output()
+                .expect("Git instalado para las pruebas");
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            result.stdout
+        }
+    }
+
+    impl Drop for TemporaryRepository {
+        /// Borra sólo la carpeta única creada por esta prueba al terminar.
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    /// Leer el repositorio no debe cambiar HEAD, archivos ni el índice Git.
+    #[test]
+    fn inspect_does_not_modify_repository() {
+        let fixture = TemporaryRepository::new();
+        let before_head = fixture.git(&["rev-parse", "HEAD"]);
+        let before_status = fixture.git(&["status", "--porcelain=v1", "-z"]);
+        let snapshot = inspect_repository(fixture.root.to_str().expect("ruta UTF-8"))
+            .expect("inspección Git correcta");
+
+        assert_eq!(snapshot.head, "main");
+        assert_eq!(snapshot.root, fixture.root.canonicalize().unwrap());
+        assert_eq!(snapshot.commits.len(), 1);
+        assert!(snapshot.git_version.starts_with("git version"));
+        assert_eq!(fixture.git(&["rev-parse", "HEAD"]), before_head);
+        assert_eq!(fixture.git(&["status", "--porcelain=v1", "-z"]), before_status);
+    }
+
+    /// Se muestran a la vez cambios preparados, cambios sin preparar y no seguidos.
+    #[test]
+    fn status_recognizes_staged_unstaged_and_untracked() {
+        let fixture = TemporaryRepository::new();
+        std::fs::write(fixture.root.join("archivo.txt"), "preparado\n").unwrap();
+        fixture.git(&["add", "archivo.txt"]);
+        std::fs::write(fixture.root.join("archivo.txt"), "sin preparar\n").unwrap();
+        std::fs::write(fixture.root.join("nombre con espacios ñ.txt"), "nuevo\n").unwrap();
+
+        let snapshot = inspect_repository(fixture.root.to_str().unwrap()).unwrap();
+        assert!(snapshot.status.iter().any(|item| {
+            item.code == "MM" && item.path == "archivo.txt"
+        }));
+        assert!(snapshot.status.iter().any(|item| {
+            item.code == "??" && item.path == "nombre con espacios ñ.txt"
+        }));
+    }
+
+    /// El protocolo -z conserva los nombres original y nuevo de un renombrado.
+    #[test]
+    fn renames_are_parsed_without_losing_paths() {
+        let bytes = b"R  nombre nuevo.txt\0nombre antiguo.txt\0";
+        let entries = parse_status(bytes).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "nombre nuevo.txt");
+        assert_eq!(entries[0].original_path.as_deref(), Some("nombre antiguo.txt"));
+    }
+
+    /// Las ramas creadas en un repositorio temporal son sólo datos de lectura.
+    #[test]
+    fn branches_and_history_are_available() {
+        let fixture = TemporaryRepository::new();
+        fixture.git(&["branch", "experimento"]);
+        let snapshot = inspect_repository(fixture.root.to_str().unwrap()).unwrap();
+        assert!(snapshot.branches.iter().any(|branch| {
+            branch.name == "experimento" && !branch.remote
+        }));
+        assert_eq!(snapshot.commits[0].subject, "Primer commit");
+        assert_eq!(snapshot.commits[0].sha.len(), 40);
+    }
+
+    /// Consultar diferencias no altera el contenido de archivos ni el commit.
+    #[test]
+    fn diffs_are_read_only_and_reject_bad_revisions() {
+        let fixture = TemporaryRepository::new();
+        std::fs::write(fixture.root.join("archivo.txt"), "cambio sin preparar\n").unwrap();
+        let sha_before = fixture.git(&["rev-parse", "HEAD"]);
+        let diff = read_diff(&fixture.root, &LocalDiffTarget::WorkingTree).unwrap();
+        assert!(diff.contains("cambio sin preparar"));
+        let diff_staged = read_diff(&fixture.root, &LocalDiffTarget::Staged).unwrap();
+        assert!(diff_staged.is_empty());
+        assert!(read_diff(
+            &fixture.root,
+            &LocalDiffTarget::Commit("--evil".to_string())
+        )
+        .is_err());
+        assert_eq!(fixture.git(&["rev-parse", "HEAD"]), sha_before);
+    }
+
+    /// Una carpeta que no es Git debe devolver error y no inicializarse.
+    #[test]
+    fn ordinary_directory_is_rejected_without_changes() {
+        let fixture = TemporaryRepository::new();
+        let ordinary = fixture.root.join("no-es-git");
+        std::fs::create_dir(&ordinary).unwrap();
+        // Esta carpeta está dentro de un repo: para comprobar el error real,
+        // usamos una carpeta temporal distinta que no tiene padres Git.
+        let isolated = std::env::temp_dir().join(format!(
+            "gitcraft-no-repo-{}-{}",
+            std::process::id(),
+            NEXT_TEST.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir(&isolated).unwrap();
+        let result = inspect_repository(isolated.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(!isolated.join(".git").exists());
+        std::fs::remove_dir(&isolated).unwrap();
+    }
+}
