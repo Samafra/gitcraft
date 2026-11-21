@@ -179,7 +179,7 @@ fn render_file_row(
         if ui
             .add_enabled(
                 can_write,
-                egui::Button::new(app.i18n.t(lang, key)).small(),
+                egui::Button::new(app.i18n.t(lang, key)),
             )
             .clicked()
         {
