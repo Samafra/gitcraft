@@ -42,6 +42,10 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
     });
     ui.add_space(5.0);
 
+    // Las confirmaciones de Stage/Unstage se colocan ARRIBA, cerca del
+    // listado que las origina, para que no queden ocultas tras el commit.
+    render_action_preview(app, ui, ctx, can_write);
+
     // La misma fotografía de Git se usa en ambas columnas. Los callbacks
     // únicamente solicitan tareas; nunca modifican los archivos directamente.
     ui.columns(2, |columns| {
@@ -101,7 +105,8 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
 
     ui.add_space(9.0);
     ui.separator();
-    render_commit_panel(app, ui, ctx, can_write);
+    let (_, staged_count) = count_categories(&repository.status);
+    render_commit_panel(app, ui, ctx, can_write, staged_count > 0);
 }
 
 /// Identifica cambios sin preparar y preparados a partir del código XY de Git.
@@ -274,6 +279,7 @@ fn render_commit_panel(
     ui: &mut egui::Ui,
     ctx: &egui::Context,
     can_write: bool,
+    has_staged_files: bool,
 ) {
     let lang = app.language;
     ui.group(|ui| {
@@ -285,7 +291,8 @@ fn render_commit_panel(
                     .desired_width(480.0)
                     .hint_text(app.i18n.t(lang, "e2_commit_hint")),
             );
-            let can_preview = can_write && !app.local_commit_message.trim().is_empty();
+            let can_preview =
+                can_write && has_staged_files && !app.local_commit_message.trim().is_empty();
             if ui
                 .add_enabled(
                     can_preview,
@@ -299,13 +306,29 @@ fn render_commit_panel(
                 );
             }
         });
+        if !has_staged_files {
+            ui.label(app.i18n.t(lang, "ux_stage_before_commit"));
+        }
         ui.label(
             egui::RichText::new(app.i18n.t(lang, "e2_commit_warning"))
                 .weak()
                 .small(),
         );
     });
+}
 
+/// Muestra la vista previa E2 encima de los archivos de estado.
+///
+/// El botón Confirmar sigue sin habilitarse si cambió la carpeta o está
+/// activa una operación Git. El motor hará la validación final antes de
+/// tocar el índice o el historial.
+fn render_action_preview(
+    app: &mut GitCraftApp,
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    can_write: bool,
+) {
+    let lang = app.language;
     if app.local_action_loading {
         ui.horizontal(|ui| {
             ui.spinner();
