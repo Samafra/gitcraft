@@ -21,6 +21,10 @@ use crate::local_git_actions::{
 // E3-A recopila historial y detalles mediante consultas Git sin escritura.
 #[cfg(not(target_arch = "wasm32"))]
 use crate::local_git_history::{blame_file, compare_commits, inspect_history, GitHistoryOverview};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::local_git_refs::{
+    execute_ref, preview_ref, RefCreated, RefCreation, RefKind, RefPreview,
+};
 use crate::mcp_client::{mcp_call_tool, mcp_discover_tools, McpTool, McpTransport};
 use crate::repo_ops::{
     commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content,
@@ -106,6 +110,12 @@ pub enum AsyncEvent {
     /// E3-A: resultado de comparación o blame, sin modificar Git.
     #[cfg(not(target_arch = "wasm32"))]
     HistoryDetailLoaded(u64, Result<String, String>),
+    /// E3-B: vista previa de una creación de referencia local.
+    #[cfg(not(target_arch = "wasm32"))]
+    RefPreviewLoaded(u64, Result<RefPreview, String>),
+    /// E3-B: resultado de la escritura explícitamente confirmada.
+    #[cfg(not(target_arch = "wasm32"))]
+    RefCreationFinished(u64, Result<RefCreated, String>),
 }
 
 /// Estado general de GitCraft: preferencias, sesión y datos que utiliza la interfaz.
@@ -662,6 +672,102 @@ impl GitCraftApp {
                 HistoryDetailRequest::Blame(file) => blame_file(&root, &file),
             };
             let _ = tx.send(AsyncEvent::HistoryDetailLoaded(generation, result));
+        });
+    }
+
+    /// E3-B: comprueba sin escribir una nueva rama o etiqueta.
+    ///
+    /// El SHA debe pertenecer al historial que ya abrió esta instancia.
+    /// Se invalida toda vista previa anterior y se identifican las respuestas
+    /// con un contador para ignorar operaciones de otro repositorio.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn preview_local_ref(&mut self, ctx: egui::Context) {
+        let Some(repository) = &self.local_repository else {
+            return;
+        };
+        if self.local_loading
+            || self.local_action_loading
+            || self.history.loading
+            || self.history.ref_loading
+        {
+            return;
+        }
+        let Some(overview) = &self.history.overview else {
+            return;
+        };
+        if overview.root != repository.root
+            || !overview
+                .revisions
+                .iter()
+                .any(|revision| revision.sha == self.history.ref_target)
+        {
+            self.history.ref_error = Some(
+                "El commit seleccionado ya no pertenece al historial cargado.".into(),
+            );
+            return;
+        }
+
+        let action = RefCreation {
+            kind: self.history.ref_kind,
+            name: self.history.ref_name.clone(),
+            target: self.history.ref_target.clone(),
+        };
+        let root = repository.root.clone();
+        let tx = self.tx.clone().unwrap();
+        self.history.ref_generation = self.history.ref_generation.wrapping_add(1);
+        let generation = self.history.ref_generation;
+        self.history.ref_preview = None;
+        self.history.ref_loading = true;
+        self.history.ref_error = None;
+        spawn_task(ctx, async move {
+            let result = preview_ref(&root, action);
+            let _ = tx.send(AsyncEvent::RefPreviewLoaded(generation, result));
+        });
+    }
+
+    /// E3-B: revoca la confirmación antes de ejecutar ninguna escritura.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn cancel_local_ref(&mut self) {
+        self.history.ref_generation = self.history.ref_generation.wrapping_add(1);
+        self.history.ref_preview = None;
+        self.history.ref_loading = false;
+        self.history.ref_error = None;
+    }
+
+    /// E3-B: ejecuta sólo la referencia incluida en la vista previa aceptada.
+    ///
+    /// El motor vuelve a verificar HEAD, índice, estado y todas las referencias.
+    /// Si han cambiado, la creación se cancela antes de tocar el repositorio.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn confirm_local_ref(&mut self, ctx: egui::Context) {
+        if self.local_loading || self.local_action_loading || self.history.ref_loading {
+            return;
+        }
+        let Some(preview) = self.history.ref_preview.take() else {
+            return;
+        };
+        let same_root = self
+            .local_repository
+            .as_ref()
+            .map(|repo| &repo.root)
+            == Some(&preview.root);
+        let same_selection = preview.action.kind == self.history.ref_kind
+            && preview.action.name == self.history.ref_name
+            && preview.action.target == self.history.ref_target;
+        if !same_root || !same_selection {
+            self.history.ref_error = Some(
+                "La carpeta o la selección cambió. Genera otra vista previa.".into(),
+            );
+            return;
+        }
+        let tx = self.tx.clone().unwrap();
+        self.history.ref_generation = self.history.ref_generation.wrapping_add(1);
+        let generation = self.history.ref_generation;
+        self.history.ref_loading = true;
+        self.history.ref_error = None;
+        spawn_task(ctx, async move {
+            let result = execute_ref(&preview);
+            let _ = tx.send(AsyncEvent::RefCreationFinished(generation, result));
         });
     }
 
@@ -1247,6 +1353,58 @@ impl eframe::App for GitCraftApp {
                     match result {
                         Ok(text) => self.history.detail = text,
                         Err(error) => self.history.error = Some(error),
+                    }
+                }
+                // E3-B: sólo se muestra una vista previa válida para esta
+                // carpeta y para la petición más reciente.
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::RefPreviewLoaded(generation, result) => {
+                    if generation != self.history.ref_generation {
+                        continue;
+                    }
+                    self.history.ref_loading = false;
+                    match result {
+                        Ok(preview) => {
+                            if self.local_repository.as_ref().map(|repo| &repo.root)
+                                == Some(&preview.root)
+                            {
+                                self.history.ref_preview = Some(preview);
+                            }
+                        }
+                        Err(error) => self.history.ref_error = Some(error),
+                    }
+                }
+                // E3-B: el comando Git ya ha terminado. Refrescar la vista
+                // es un paso independiente, no un requisito para considerar
+                // que una referencia se creó correctamente.
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::RefCreationFinished(generation, result) => {
+                    if generation != self.history.ref_generation {
+                        continue;
+                    }
+                    self.history.ref_loading = false;
+                    self.history.ref_preview = None;
+                    match result {
+                        Ok(created) => {
+                            if self.local_repository.as_ref().map(|repo| &repo.root)
+                                == Some(&created.root)
+                            {
+                                let label_key = match created.action.kind {
+                                    RefKind::Branch => "e3b_branch_created",
+                                    RefKind::Tag => "e3b_tag_created",
+                                };
+                                let notice = format!(
+                                    "{}: {}",
+                                    self.i18n.t(self.language, label_key),
+                                    created.action.name
+                                );
+                                // Releer E1 e invalidar la fotografía E3-A.
+                                // La rama activa y los archivos no cambian.
+                                self.refresh_local_repository(ctx.clone());
+                                self.local_action_notice = Some(notice);
+                            }
+                        }
+                        Err(error) => self.history.ref_error = Some(error),
                     }
                 }
                 AsyncEvent::McpToolsLoaded(Ok(tools)) => {
