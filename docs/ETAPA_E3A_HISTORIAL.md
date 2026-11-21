@@ -4,7 +4,7 @@
 **Rama:** develop únicamente.  
 **Punto de recuperación previo:** 40b7eb55812756acc60f3af76be17839e6ed8252 (cierre E2 macOS Intel).  
 **main estable:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4.  
-**Estado:** IMPLEMENTADO en develop; pruebas automáticas y visuales PENDIENTES.
+**Estado:** IMPLEMENTADO y VALIDACIÓN AUTOMÁTICA E3-A SUPERADA en macOS Intel según resultado comunicado por el usuario. PRUEBAS VISUALES PENDIENTES.
 
 ## Alcance del roadmap
 
@@ -95,14 +95,21 @@ set -o pipefail
 bash scripts/validar_e3a_local.sh 2>&1 | tee /tmp/gitcraft-e3a-validacion.log
 ~~~
 
-Resultado esperado, todavía no confirmado:
+Resultado confirmado por el usuario al ejecutar la validación automática:
 
 ~~~text
 OK: controles automáticos E3-A completados; faltan pruebas visuales.
 ~~~
 
+El usuario comunicó la finalización correcta del script completo sobre el
+commit 37f73fdccc3e495cc1dd88c6d2a0546f9b2ee17b. Este resultado confirma
+que Rustfmt, compilación nativa, pruebas E3-A, regresiones E0/E1/E2 y Clippy
+han pasado los controles obligatorios. La compilación WebAssembly del script
+es condicional; no se deduce de la última línea si esa comprobación se ejecutó.
+
 Los tests crean repositorios temporales con commits, etiquetas y stash; sólo
-ellos escriben en sus carpetas privadas de prueba.
+ellos escriben en sus carpetas privadas de prueba. **Faltan las comprobaciones
+visuales antes de declarar cerrada la etapa E3-A.**
 
 ## Repositorio temporal para las pruebas visuales
 
@@ -146,7 +153,7 @@ la ruta mostrada; no sustituirla por la ruta de Samafra/gitcraft.
 
 | Plataforma | Estado E3-A |
 | --- | --- |
-| macOS Intel | Implementada, pruebas automáticas y visuales pendientes |
+| macOS Intel | Validación automática correcta; pruebas visuales pendientes |
 | macOS ARM | Pendiente |
 | Linux | Pendiente |
 | Windows | Pendiente |
