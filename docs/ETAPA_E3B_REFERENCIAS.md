@@ -4,7 +4,7 @@
 **Rama de implementación:** develop, exclusivamente.  
 **Punto de recuperación anterior a E3-B:** 448f42cac545c6e5e39bb8f3da5a1f06097b4d0c (E3-A cerrada en macOS Intel).  
 **Referencia estable main:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4.  
-**Estado:** IMPLEMENTADO y VALIDACIÓN AUTOMÁTICA E3-B SUPERADA en macOS Intel, según resultado comunicado por el usuario. PRUEBAS VISUALES PENDIENTES.
+**Estado:** **E3-B VALIDADA EN macOS INTEL** para el alcance de creación controlada de ramas y etiquetas locales. La batería automática terminó correctamente y el usuario respondió «OK» al bloque de nueve pruebas visuales; se registra como confirmación del bloque sin incidencias comunicadas. Otras plataformas y el resto de E3 permanecen pendientes.
 
 ## Objetivo y límites de la subetapa
 
@@ -88,8 +88,10 @@ Git en un repositorio temporal Linux, confirmando que:
   versiones de contenido sin escribir objetos.
 
 También se revisaron la estructura de los archivos Rust y la paridad de
-traducciones ES/EN. **Esto no prueba que el código Rust compile en macOS,
-ni sustituye las pruebas automáticas y visuales que aún faltan.**
+traducciones ES/EN. **Estas verificaciones preparatorias, por sí solas, no
+acreditan la compilación ni el funcionamiento de la interfaz**; ambas
+validaciones se completaron posteriormente en macOS Intel según las
+confirmaciones comunicadas por el usuario.
 
 ## 1. Validación automática en macOS Intel
 
@@ -217,19 +219,48 @@ git status -sb
 git log -1 --oneline
 ~~~
 
+## 4. Cierre de pruebas visuales — 21/11/2026
+
+El usuario respondió **«OK»** al protocolo visual E3-B de nueve
+comprobaciones, sin detallar resultados individuales ni indicar incidencias.
+Se interpreta como confirmación satisfactoria de todo el bloque previamente
+solicitado, ejecutado sobre un repositorio temporal independiente:
+
+1. Historial con dos commits disponible antes de crear referencias.
+2. Vista previa de rama nueva sin escritura en el primer clic.
+3. Rama `rama/e3b` creada con confirmación, sin checkout.
+4. Etiqueta ligera `etiqueta-e3b` creada sobre el commit seleccionado.
+5. Referencias y SHA de destino comprobados, con HEAD original conservado.
+6. Nombres duplicados rechazados sin sobrescribir ramas ni etiquetas.
+7. Vista previa obsoleta rechazada tras cambiar un archivo externamente.
+8. Nombre inválido iniciado en guion rechazado sin crear referencias.
+9. Repositorio de GitCraft limpio, sin publicación remota ni token requerido.
+
+Junto con la validación automática E3-B ya registrada, se cumplen los
+criterios acordados para **cerrar E3-B en macOS Intel**. Esta conclusión
+se apoya en las pruebas del Mac comunicadas por el usuario; no supone
+verificación visual ejecutada desde el entorno remoto de revisión.
+
+**Limitaciones que continúan vigentes:** no hay bloqueo transaccional
+general entre procesos Git; los hooks no se ejecutan al crear referencias;
+no se realizan operaciones avanzadas de borrado, checkout, merge, rebase,
+reset, cherry-pick o publicación. El cierre no acredita otras plataformas
+y no autoriza integrar cambios en `main`.
+
 ## Compatibilidad y cierre
 
 | Plataforma | Estado E3-B |
 | --- | --- |
-| macOS Intel | Validación automática correcta; pruebas visuales pendientes |
+| macOS Intel | **VALIDADA**: batería automática correcta y bloque de nueve pruebas visuales confirmado |
 | macOS Apple Silicon | Pendiente |
 | Linux | Pendiente |
 | Windows | Pendiente; comprobar semántica de hooks y rutas |
 | WebAssembly | Sin motor Git local; compilación pendiente |
 
-**Cierre E3-B:** sólo tras Rustfmt, check, los once tests E3-B,
-regresiones, Clippy y pruebas manuales satisfactorias sobre un
-repositorio temporal de macOS Intel. E3 completo continúa abierto.
+**Cierre E3-B completado en macOS Intel:** Rustfmt, compilación, los
+once tests E3-B, regresiones y Clippy terminaron correctamente; el usuario
+confirmó con «OK» las pruebas visuales sobre un repositorio temporal.
+E3 completo y la validación multiplataforma continúan pendientes.
 
-No se modifica main ni se integra sin autorización expresa y
-punto de recuperación comprobado.
+No se modifica `main` ni se integra sin autorización expresa y punto
+de recuperación comprobado.
