@@ -4,7 +4,19 @@
 **Rama:** develop (únicamente).  
 **Rollback previo:** d9482955da7783a3b2894df52c98584b25ddbf84 (E1 validada).  
 **main:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4 (intacta).  
-**Estado:** IMPLEMENTADO, PENDIENTE DE COMPILACIÓN Y PRUEBAS E2.
+**Estado:** IMPLEMENTADO y VALIDACIÓN AUTOMÁTICA E2 SUPERADA en macOS Intel, según resultado comunicado por el usuario. PRUEBAS MANUALES DE STAGE/UNSTAGE/COMMIT PENDIENTES.
+
+## Evidencia de validación automática — 21/11/2026
+
+El usuario ejecutó el script de validación de E2 en macOS Intel después de incorporar el commit de formato `7985ce3462aebc21d8b933bf8ff6f13811dc09d2` y comunicó exactamente este resultado final:
+
+```text
+OK: controles automáticos E2 completados; faltan pruebas manuales.
+```
+
+Este resultado acredita que el script terminó con cero fallos en sus comprobaciones obligatorias: Rustfmt, compilación nativa, tests E2, suite de regresión y Clippy. WebAssembly se comprueba condicionalmente cuando está instalado su target; el resultado final por sí solo no identifica si se ejecutó esa sección.
+
+El siguiente requisito es comprobar visualmente **stage, unstage, vista previa y commit local** sobre un repositorio temporal independiente. No se declara E2 cerrada ni validación de las demás plataformas.
 
 ## Alcance
 
@@ -131,7 +143,7 @@ No borrar el repositorio temporal antes de revisar el resultado.
 
 | Plataforma | Estado |
 | --- | --- |
-| macOS Intel | Implementada, validación E2 pendiente |
+| macOS Intel | Validación automática E2 superada; pruebas visuales pendientes |
 | macOS Apple Silicon | Pendiente |
 | Linux | Pendiente |
 | Windows | Pendiente de revisión específica de rutas y hooks |
