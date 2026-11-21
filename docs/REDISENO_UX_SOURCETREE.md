@@ -4,7 +4,7 @@
 **Rama:** develop exclusivamente  
 **Punto de recuperación:** 4ccdf018d0f8ffefb679901d73866db973830a01 (E3-B validada en macOS Intel)  
 **main estable:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4  
-**Estado:** IMPLEMENTADO EN DEVELOP; FORMAT, CARGO Y PRUEBAS VISUALES PENDIENTES.
+**Estado:** IMPLEMENTADO EN DEVELOP. **Rustfmt sin diferencias confirmado por el usuario sobre `6bb7ce99`**. Compilación nativa y WebAssembly, seis tests de interfaz, 50 pruebas de regresión y Clippy completados correctamente sobre `7b0326b8` (con advertencias no bloqueantes en Clippy y WASM). Entre ambos commits solo cambió la indentación final de `src/ui_local_history.rs`. **Pruebas visuales pendientes**.
 
 ## Motivo
 
@@ -91,7 +91,7 @@ set -o pipefail
 bash scripts/validar_ux_sourcetree.sh 2>&1 | tee /tmp/gitcraft-ux-validacion.log
 ~~~
 
-**Resultado esperado (no confirmado):**
+**Resultado automático comunicado:** el script pasó todas las comprobaciones salvo una diferencia de indentación detectada por Rustfmt. El usuario confirmó posteriormente que `cargo fmt --all -- --check` no muestra diferencias tras el commit `6bb7ce99`. No se ha repetido el script completo sobre dicho commit, que únicamente modifica espacios.
 
 ~~~text
 OK: controles automáticos UX superados; pruebas visuales pendientes.
@@ -167,7 +167,6 @@ git log -1 --oneline
 
 ## Criterios de cierre
 
-La interfaz queda **implementada pero no validada** hasta superar Cargo,
-Rustfmt, Clippy, regresiones y pruebas visuales en macOS Intel.
+La comprobación automática está **sustancialmente completada** en macOS Intel: compilación, seis tests de interfaz, 50 regresiones y Clippy superados en `7b0326b8`, y Rustfmt confirmado sin diferencias en `6bb7ce99`. El último cambio es exclusivamente de indentación. **El cierre está pendiente de las pruebas visuales**.
 E3-C no comienza hasta cerrar la etapa de rediseño. No se integra
 en main sin autorización expresa y rollback comprobado.
