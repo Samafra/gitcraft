@@ -1,8 +1,12 @@
+//! Vista MCP: lista servidores y herramientas y solicita consentimiento para las credenciales.
+//! Los permisos no son permanentes: cambiar el servidor obliga a volver a autorizarlos.
+
 use crate::app::GitCraftApp;
 use crate::mcp_client::McpTransport;
 use eframe::egui;
 
 // Dibuja la interfaz del Cliente MCP con desplegable de conexiones predefinidas + caja manual.
+/// Dibuja el cliente MCP e incluye una autorización explícita para compartir el PAT.
 pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
     ui.heading(app.i18n.t(lang, "mcp_panel_title"));
