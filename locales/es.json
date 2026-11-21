@@ -187,5 +187,6 @@
   "ux_nothing_staged": "No hay archivos preparados.",
   "ux_diff_preview": "Diferencias del archivo",
   "ux_select_file_hint": "Selecciona un archivo de la izquierda para consultar sus diferencias.",
-  "ux_commit_message": "Mensaje del commit local"
+  "ux_commit_message": "Mensaje del commit local",
+  "ux_stage_before_commit": "Prepara al menos un archivo antes de crear el commit."
 }
