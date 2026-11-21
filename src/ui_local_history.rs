@@ -149,7 +149,9 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
     // modificar app al pulsar Actualizar, sin infringir las reglas de Rust.
     let title = app.i18n.t(lang, "e3_title").to_owned();
     ui.separator();
-    ui.collapsing(title, |ui| {
+    egui::CollapsingHeader::new(title)
+        .default_open(true)
+        .show(ui, |ui| {
         ui.label(
             egui::RichText::new(app.i18n.t(lang, "e3_readonly_note"))
                 .weak()
@@ -272,9 +274,8 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             }
         });
 
-        // E3-B se integra después del comparador sin cambiar sus controles.
-        // Sólo muestra escrituras limitadas a nuevas ramas y etiquetas locales.
-        render_ref_creation_panel(app, ui, ctx, &overview, can_query);
+        // E3-B se presenta ahora en las pantallas laterales Ramas y
+        // Etiquetas; el historial queda dedicado a lectura y comparación.
 
         ui.group(|ui| {
             ui.label(egui::RichText::new(app.i18n.t(lang, "e3_blame")).strong());
@@ -368,7 +369,7 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
 ///
 /// Los formularios son temporales. Un cambio en nombre, tipo o commit revoca
 /// cualquier vista previa; sólo una segunda pulsación puede crear la referencia.
-fn render_ref_creation_panel(
+pub fn render_ref_creation_panel(
     app: &mut GitCraftApp,
     ui: &mut egui::Ui,
     ctx: &egui::Context,
