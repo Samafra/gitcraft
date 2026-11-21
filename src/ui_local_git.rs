@@ -209,12 +209,9 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                             let selected = app.local_diff_target.as_ref()
                                 == Some(&LocalDiffTarget::Commit(commit.sha.clone()));
                             if ui
-                                .add_enabled(
-                                    !app.local_diff_loading,
-                                    egui::Button::new(
-                                        egui::RichText::new(&commit.short_sha).monospace(),
-                                    )
-                                    .selected(selected),
+                                .selectable_label(
+                                    selected,
+                                    egui::RichText::new(&commit.short_sha).monospace(),
                                 )
                                 .clicked()
                             {
