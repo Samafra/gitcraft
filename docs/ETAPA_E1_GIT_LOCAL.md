@@ -6,6 +6,23 @@
 **main estable:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4.  
 **Estado:** IMPLEMENTADO en develop; COMPILACIÓN Y PRUEBAS DEL NUEVO CÓDIGO PENDIENTES.
 
+## Incidencia de la primera validación local y corrección
+
+El usuario ejecutó `scripts/validar_e1_local.sh` en macOS Intel y compartió estos resultados:
+
+| Verificación | Resultado antes de corregir |
+| --- | --- |
+| Rustfmt | ERROR: diferencias en `src/app.rs` y `src/local_git.rs` |
+| Compilación nativa | OK |
+| Tests locales E1 | ERROR: 3 correctos, 6 fallidos |
+| Todos los tests (E0+E1) | ERROR: 12 correctos, 6 fallidos |
+| Clippy | OK, con advertencias |
+| WebAssembly | OK (compilación) |
+
+Se localizó una regresión funcional en `run_git`: el parámetro `args` se recibía pero no se enviaba a `Command`, por lo que el proceso Git se ejecutaba sin subcomandos. Este defecto es coherente con el aviso `unused variable: args` y explica los seis tests locales fallidos, aunque la salida aportada no incluye los mensajes individuales de cada test.
+
+**Corrección aplicada en `develop`:** restaurar `command.args(args);`, incorporar el test `git_command_forwards_its_arguments` para evitar la misma regresión, y corregir las diferencias Rustfmt que muestra el registro en los dos archivos. `main` permanece intacta. Estas correcciones **están pendientes de ejecutar y verificar nuevamente con Cargo en macOS**.
+
 ## Objetivo y alcance
 
 Esta etapa introduce lectura de repositorios Git locales usando el Git instalado en el equipo, sin requerir autenticación ni contacto con GitHub. No se implementa Mercurial.
