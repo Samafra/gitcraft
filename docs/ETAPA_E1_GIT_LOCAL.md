@@ -4,7 +4,7 @@
 **Rama de trabajo:** develop  
 **Punto de recuperación previo a E1:** a74a4ba00ad6906a9ab210ff287e3067c44c2c17 (cierre E0 macOS Intel).  
 **main estable:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4.  
-**Estado:** IMPLEMENTADO en develop; VALIDACIÓN AUTOMÁTICA SUPERADA en macOS Intel según ejecución comunicada por el usuario. PRUEBAS VISUALES PENDIENTES.
+**Estado:** E1 VALIDADA EN macOS INTEL dentro del alcance de lectura Git local probado. La compilación, tests, formato y Clippy se ejecutaron correctamente en el Mac del usuario, junto con siete verificaciones visuales sin incidencias. Las plataformas restantes y las pruebas en navegador siguen pendientes. No se ha integrado nada en `main`.
 
 ## Incidencia de la primera validación local y corrección
 
@@ -21,7 +21,7 @@ El usuario ejecutó `scripts/validar_e1_local.sh` en macOS Intel y compartió es
 
 Se localizó una regresión funcional en `run_git`: el parámetro `args` se recibía pero no se enviaba a `Command`, por lo que el proceso Git se ejecutaba sin subcomandos. Este defecto es coherente con el aviso `unused variable: args` y explica los seis tests locales fallidos, aunque la salida aportada no incluye los mensajes individuales de cada test.
 
-**Corrección aplicada en `develop`:** restaurar `command.args(args);`, incorporar el test `git_command_forwards_its_arguments` para evitar la misma regresión, y corregir las diferencias Rustfmt que muestra el registro en los dos archivos. `main` permanece intacta. **Correcciones verificadas en macOS Intel por el usuario:** 10 tests E1 correctos, 0 fallidos, incluido el nuevo test de regresión. También comunicó que la validación completa `scripts/validar_e1_local.sh` terminó sin errores. Las pruebas visuales aún no se han realizado.
+**Corrección aplicada en `develop`:** restaurar `command.args(args);`, incorporar el test `git_command_forwards_its_arguments` para evitar la misma regresión, y corregir las diferencias Rustfmt que muestra el registro en los dos archivos. `main` permanece intacta. **Correcciones verificadas en macOS Intel por el usuario:** 10 tests E1 correctos, 0 fallidos, incluido el nuevo test de regresión. También comunicó que la validación completa `scripts/validar_e1_local.sh` terminó sin errores. Las siete pruebas visuales se realizaron posteriormente y fueron comunicadas como correctas, sin observaciones.
 
 ## Evidencia de validación automática corregida — 21/11/2026
 
@@ -43,7 +43,23 @@ OK: validación automática E1 local completada; faltan pruebas visuales.
 
 El script comprueba Rustfmt, compilación nativa, tests específicos E1, regresiones E0 y Clippy; comprueba WebAssembly sólo si está instalado el target. El registro anterior del usuario confirmó que `cargo check --target wasm32-unknown-unknown` también había pasado; sigue pendiente ejecutar y comprobar la interfaz en navegador.
 
-**Alcance de la evidencia:** resultados de Cargo ejecutados en el Mac del usuario; no se han ejecutado Cargo ni las pruebas gráficas desde el entorno de revisión remota. **No declarar E1 cerrada hasta completar las comprobaciones visuales**, especialmente uso sin token, lectura de diffs, navegación entre repositorios y ausencia de modificaciones.
+**Alcance de la evidencia:** resultados de Cargo ejecutados en el Mac del usuario; no se han ejecutado Cargo ni las pruebas gráficas desde el entorno de revisión remota. **Las siete comprobaciones visuales básicas han sido comunicadas como correctas.** No se han ejecutado las pruebas gráficas desde el entorno de revisión remota; otros escenarios y plataformas conservan sus límites expresos.
+
+## Evidencia de validación visual y cierre macOS Intel — 21/11/2026
+
+El usuario comunicó **OK en las siete pruebas visuales** de GitCraft E1, sin observaciones ni incidencias:
+
+1. GitCraft abre correctamente sin token de GitHub.
+2. La pestaña **Git local** abre el repositorio indicado.
+3. El estado, las ramas y el historial coinciden con Git.
+4. Los diffs de trabajo, staging y commits se consultan correctamente.
+5. Abrir una subcarpeta resuelve correctamente a la raíz del repositorio.
+6. Una ruta inexistente devuelve un error controlado.
+7. El repositorio permanece sin modificaciones después de la prueba.
+
+Esta evidencia se suma al resultado correcto de las diez pruebas unitarias específicas del motor Git y de la validación automática E1 completa. La ejecución fue realizada en el Mac Intel del usuario y sus resultados fueron comunicados en la conversación; no se afirma haber reproducido las pruebas gráficas en el entorno remoto.
+
+**Decisión:** cerrar **E1 en macOS Intel para las funciones de lectura documentadas**. Se preserva el punto de recuperación previo `a74a4ba00ad6906a9ab210ff287e3067c44c2c17`. No se autoriza por este cierre ninguna operación de escritura Git, integración en `main`, ni atribuir compatibilidad verificada a otras plataformas.
 
 ## Objetivo y alcance
 
@@ -175,7 +191,7 @@ Esperado: sin modificaciones, develop y el mismo HEAD anterior a las pruebas.
 
 | Plataforma | Diseño E1 | Verificación |
 | --- | --- | --- |
-| macOS Intel | Git CLI nativo | Validación automática superada; pruebas visuales pendientes |
+| macOS Intel | Git CLI nativo | **VALIDADA**: pruebas automáticas y siete comprobaciones visuales correctas |
 | macOS Apple Silicon | Git CLI nativo | Pendiente |
 | Linux | Git CLI nativo | Pendiente |
 | Windows | Git CLI nativo | Pendiente |
@@ -198,4 +214,4 @@ La arquitectura no implica que todas las plataformas estén verificadas; cada un
 
 ## Criterio de cierre
 
-E1 sólo podrá marcarse como validada en macOS Intel después de ejecutar sin fallos Cargo check/test/fmt/Clippy, las pruebas temporales, y las pruebas manuales de interfaz sin login. No se modifica main ni se integra código sin autorización explícita y punto de recuperación comprobado.
+**E1 validada en macOS Intel dentro de su alcance de solo lectura.** Se recibieron resultados correctos de Cargo check/test/fmt/Clippy, los diez tests temporales y siete verificaciones manuales de la interfaz sin autenticación GitHub. La validación multiplataforma sigue pendiente según la matriz. No se modifica `main` ni se integra código allí sin autorización explícita, comprobación de ramas y punto de recuperación verificable.
