@@ -79,16 +79,18 @@ Se han incorporado dos tests de proceso real en `src/mcp_client.rs`. Ejecutan el
 - `no_autorizado_no_hereda_credenciales_github`: un proceso no autorizado no debe recibir las variables.
 - `autorizado_recibe_solo_token_ficticio`: un proceso autorizado recibe únicamente el token ficticio por las variables previstas.
 
-Se ha extraído la configuración de variables de entorno a `configure_mcp_github_environment`, que utiliza el cliente real. **Estos nuevos tests todavía no se han ejecutado en el Mac del usuario y no forman parte de las siete pruebas manuales ya comunicadas.**
+Se ha extraído la configuración de variables de entorno a `configure_mcp_github_environment`, que utiliza el cliente real. **El usuario ejecutó las dos pruebas de aislamiento MCP correctamente en macOS** y comunicó literalmente: `test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s`. Estos resultados no forman parte de las siete pruebas manuales anteriores: son tests automatizados adicionales.
 
 Los pasos completos para ejecutarlos, probar cambios rápidos de repositorio, crear una rama exclusivamente de prueba y controlar 403/429 están documentados en [Guía de pruebas excepcionales E0](PRUEBAS_EXCEPCIONALES_E0.md).
+
+El usuario volvió a ejecutar `scripts/validar_e0_local.sh` después de corregirse en `develop` los tres detalles de Rustfmt del código MCP. Resultado comunicado: `OK: controles locales terminados sin errores; revisar aparte las pruebas manuales.` El commit de esa corrección es `a31e287321191fb3d4cd7e2d48ca2bc8e8854544`. Los tests fueron ejecutados localmente por el usuario; la revisión remota sólo verifica el código y los commits publicados.
 
 ## Pruebas funcionales adicionales pendientes
 
 - **Creación remota de una rama y permanencia de la selección** en un repositorio de prueba, sin tocar `Samafra/gitcraft/main`.
 - **Respuesta obsoleta:** alternar rápidamente entre repositorios/ramas/archivos mientras las consultas siguen en curso y verificar que no se mezclan datos; desconectar durante una petición.
 - **Errores de GitHub 403/429:** contrastar la presentación de errores con un escenario de prueba controlado; los tests automatizados de respuestas HTTP ya se ejecutaron satisfactoriamente en macOS según el usuario.
-- **Credenciales MCP en procesos:** comprobar, con servidor de pruebas local y token ficticio, que los procesos no autorizados no heredan el token. La comprobación visual del consentimiento sí consta como OK.
+- **Credenciales MCP en procesos:** la política de entorno quedó validada con dos tests locales utilizando credenciales ficticias (OK); queda fuera del alcance de estos dos tests una auditoría integral de todos los transportes y servidores MCP.
 - **Otras plataformas:** builds y pruebas manuales de macOS ARM, Windows, Linux y WebAssembly según corresponda; la arquitectura web no tiene las mismas capacidades nativas.
 
 No ejecutar operaciones destructivas ni crear ramas o commits de prueba dentro de la rama estable.
