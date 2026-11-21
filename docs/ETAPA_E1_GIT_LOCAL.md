@@ -4,7 +4,7 @@
 **Rama de trabajo:** develop  
 **Punto de recuperación previo a E1:** a74a4ba00ad6906a9ab210ff287e3067c44c2c17 (cierre E0 macOS Intel).  
 **main estable:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4.  
-**Estado:** IMPLEMENTADO en develop; COMPILACIÓN Y PRUEBAS DEL NUEVO CÓDIGO PENDIENTES.
+**Estado:** IMPLEMENTADO en develop; VALIDACIÓN AUTOMÁTICA SUPERADA en macOS Intel según ejecución comunicada por el usuario. PRUEBAS VISUALES PENDIENTES.
 
 ## Incidencia de la primera validación local y corrección
 
@@ -21,7 +21,29 @@ El usuario ejecutó `scripts/validar_e1_local.sh` en macOS Intel y compartió es
 
 Se localizó una regresión funcional en `run_git`: el parámetro `args` se recibía pero no se enviaba a `Command`, por lo que el proceso Git se ejecutaba sin subcomandos. Este defecto es coherente con el aviso `unused variable: args` y explica los seis tests locales fallidos, aunque la salida aportada no incluye los mensajes individuales de cada test.
 
-**Corrección aplicada en `develop`:** restaurar `command.args(args);`, incorporar el test `git_command_forwards_its_arguments` para evitar la misma regresión, y corregir las diferencias Rustfmt que muestra el registro en los dos archivos. `main` permanece intacta. Estas correcciones **están pendientes de ejecutar y verificar nuevamente con Cargo en macOS**.
+**Corrección aplicada en `develop`:** restaurar `command.args(args);`, incorporar el test `git_command_forwards_its_arguments` para evitar la misma regresión, y corregir las diferencias Rustfmt que muestra el registro en los dos archivos. `main` permanece intacta. **Correcciones verificadas en macOS Intel por el usuario:** 10 tests E1 correctos, 0 fallidos, incluido el nuevo test de regresión. También comunicó que la validación completa `scripts/validar_e1_local.sh` terminó sin errores. Las pruebas visuales aún no se han realizado.
+
+## Evidencia de validación automática corregida — 21/11/2026
+
+Tras incorporar en `develop` la corrección de `run_git` y el formato Rustfmt, el usuario ejecutó:
+
+```text
+cargo test --locked local_git::tests -- --nocapture
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out
+```
+
+Entre los tests correctos figura `git_command_forwards_its_arguments`, añadido para impedir que la omisión de `command.args(args)` reaparezca.
+
+Además, el usuario comunicó el resultado de la batería completa:
+
+```text
+OK: validación automática E1 local completada; faltan pruebas visuales.
+```
+
+El script comprueba Rustfmt, compilación nativa, tests específicos E1, regresiones E0 y Clippy; comprueba WebAssembly sólo si está instalado el target. El registro anterior del usuario confirmó que `cargo check --target wasm32-unknown-unknown` también había pasado; sigue pendiente ejecutar y comprobar la interfaz en navegador.
+
+**Alcance de la evidencia:** resultados de Cargo ejecutados en el Mac del usuario; no se han ejecutado Cargo ni las pruebas gráficas desde el entorno de revisión remota. **No declarar E1 cerrada hasta completar las comprobaciones visuales**, especialmente uso sin token, lectura de diffs, navegación entre repositorios y ausencia de modificaciones.
 
 ## Objetivo y alcance
 
@@ -153,11 +175,11 @@ Esperado: sin modificaciones, develop y el mismo HEAD anterior a las pruebas.
 
 | Plataforma | Diseño E1 | Verificación |
 | --- | --- | --- |
-| macOS Intel | Git CLI nativo | Pendiente de pruebas del usuario |
+| macOS Intel | Git CLI nativo | Validación automática superada; pruebas visuales pendientes |
 | macOS Apple Silicon | Git CLI nativo | Pendiente |
 | Linux | Git CLI nativo | Pendiente |
 | Windows | Git CLI nativo | Pendiente |
-| WebAssembly | Vista informativa sin ejecución de Git local | Pendiente de compilación y revisión |
+| WebAssembly | Vista informativa sin ejecución de Git local | Compilación `cargo check` superada en la primera validación; prueba en navegador pendiente |
 
 La arquitectura no implica que todas las plataformas estén verificadas; cada una necesita pruebas reales.
 
