@@ -44,6 +44,7 @@ tampoco se incorporan aquí. Estas operaciones requieren fases específicas.
 ## Archivos
 
 - src/local_git_history.rs — motor E3-A y siete tests sobre fixtures temporales.
+- src/ui_local_history.rs añade además dos tests puros de selección y revocación de estado.
 - src/ui_local_history.rs — interfaz gráfica, selectores y estado de memoria.
 - src/app.rs — eventos asíncronos con comprobación de generación.
 - src/ui_local_git.rs — integración tras las herramientas E1/E2.
@@ -89,14 +90,41 @@ OK: controles automáticos E3-A completados; faltan pruebas visuales.
 Los tests crean repositorios temporales con commits, etiquetas y stash; sólo
 ellos escriben en sus carpetas privadas de prueba.
 
+## Repositorio temporal para las pruebas visuales
+
+Después de superar los controles de Cargo, preparar un repositorio
+independiente para no usar operaciones de GitCraft sobre el código real:
+
+~~~bash
+E3_TEST="$(mktemp -d /tmp/gitcraft-e3-manual.XXXXXX)"
+git -C "$E3_TEST" init -q
+git -C "$E3_TEST" symbolic-ref HEAD refs/heads/prueba-e3
+git -C "$E3_TEST" config user.name "GitCraft E3 prueba"
+git -C "$E3_TEST" config user.email "gitcraft-e3@example.invalid"
+printf 'primera línea\n' > "$E3_TEST/ejemplo.txt"
+git -C "$E3_TEST" add -- ejemplo.txt
+git -C "$E3_TEST" -c core.hooksPath=/dev/null -c commit.gpgsign=false commit -qm "Primer commit E3"
+git -C "$E3_TEST" tag etiqueta-e3
+printf 'segunda línea\n' > "$E3_TEST/ejemplo.txt"
+git -C "$E3_TEST" add -- ejemplo.txt
+git -C "$E3_TEST" -c core.hooksPath=/dev/null -c commit.gpgsign=false commit -qm "Segundo commit E3"
+printf 'cambio reservado\n' >> "$E3_TEST/ejemplo.txt"
+git -C "$E3_TEST" stash push -m "Reserva temporal E3"
+printf 'RUTA TEMPORAL E3: %s\n' "$E3_TEST"
+~~~
+
+Este bloque crea **únicamente un repositorio de prueba aislado**. Conservar
+la ruta mostrada; no sustituirla por la ruta de Samafra/gitcraft.
+
 ## Pruebas visuales después de validar Cargo
 
 1. Abrir GitCraft con cargo run --locked, sin token GitHub.
 2. En Git local, abrir un repositorio existente con dos o más commits.
 3. Desplegar Historial avanzado, pulsar Actualizar y comprobar el grafo.
 4. Elegir dos commits diferentes y contrastar el diff con git diff en Terminal.
-5. Seleccionar un archivo seguido, consultar blame y comparar con git blame.
-6. Consultar reflog, tags y stash, sin controles de aplicación ni eliminación.
+5. Seleccionar ejemplo.txt, consultar blame y comparar con git blame HEAD.
+6. Consultar reflog, etiqueta-e3 y la entrada Reserva temporal E3 en stash;
+   no debe existir ningún control para aplicar o eliminar estas referencias.
 7. Cambiar a otro repositorio; el panel debe descartar datos anteriores.
 8. Comprobar con git status -sb y git log -1 que el repositorio no cambió.
 
