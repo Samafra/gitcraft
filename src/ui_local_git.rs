@@ -48,7 +48,7 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         // distinto del que el usuario ve en la barra de ubicación.
         let path_changed = ui
             .add_enabled(
-                !app.local_action_loading,
+                !app.local_action_loading && !app.history.ref_loading,
                 egui::TextEdit::singleline(&mut app.local_repo_input)
                     .desired_width(420.0)
                     .hint_text(app.i18n.t(lang, "local_path_hint")),
@@ -61,6 +61,7 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             .add_enabled(
                 !app.local_loading
                     && !app.local_action_loading
+                    && !app.history.ref_loading
                     && !app.local_repo_input.trim().is_empty(),
                 egui::Button::new(app.i18n.t(lang, "local_open")),
             )
@@ -70,7 +71,10 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         }
         if ui
             .add_enabled(
-                !app.local_loading && !app.local_action_loading && app.local_repository.is_some(),
+                !app.local_loading
+                    && !app.local_action_loading
+                    && !app.history.ref_loading
+                    && app.local_repository.is_some(),
                 egui::Button::new(app.i18n.t(lang, "local_refresh")),
             )
             .clicked()
@@ -204,7 +208,9 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                                         if unstaged
                                             && ui
                                                 .add_enabled(
-                                                    path_matches && !app.local_action_loading,
+                                                    path_matches
+                                                        && !app.local_action_loading
+                                                        && !app.history.ref_loading,
                                                     egui::Button::new(app.i18n.t(lang, "e2_stage")),
                                                 )
                                                 .clicked()
@@ -217,7 +223,9 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                                         if staged
                                             && ui
                                                 .add_enabled(
-                                                    path_matches && !app.local_action_loading,
+                                                    path_matches
+                                                        && !app.local_action_loading
+                                                        && !app.history.ref_loading,
                                                     egui::Button::new(
                                                         app.i18n.t(lang, "e2_unstage"),
                                                     ),
@@ -253,6 +261,7 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                 .add_enabled(
                     path_matches
                         && !app.local_action_loading
+                        && !app.history.ref_loading
                         && !app.local_commit_message.trim().is_empty(),
                     egui::Button::new(app.i18n.t(lang, "e2_preview_commit")),
                 )
@@ -307,7 +316,10 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                 };
                 if ui
                     .add_enabled(
-                        message_ok && path_matches && !app.local_action_loading,
+                        message_ok
+                            && path_matches
+                            && !app.local_action_loading
+                            && !app.history.ref_loading,
                         egui::Button::new(app.i18n.t(lang, "e2_confirm")),
                     )
                     .clicked()
