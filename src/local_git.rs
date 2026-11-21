@@ -113,23 +113,9 @@ fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
         command.arg("-C").arg(directory);
     }
 
-    // No lanzar paginadores ni pedir contraseñas durante operaciones locales.
+    // La política de entorno está separada para que pueda verificarse.
+    configure_git_environment(&mut command);
     let output = command
-        .args(args)
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_PAGER", "cat")
-        // En clones parciales, Git puede descargar objetos al leer el historial.
-        // Evitamos esa conexión implícita para que E1 siga siendo local.
-        .env("GIT_NO_LAZY_FETCH", "1")
-        // Las variables de una Terminal usada para depurar otro repositorio
-        // no deben redirigir una consulta hacia su índice o carpeta .git.
-        .env_remove("GIT_DIR")
-        .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_INDEX_FILE")
-        .env_remove("GIT_COMMON_DIR")
-        .env_remove("GIT_OBJECT_DIRECTORY")
-        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
         .output()
         .map_err(|error| format!("No se pudo ejecutar Git: {}", error))?;
 
@@ -143,6 +129,27 @@ fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
         });
     }
     Ok(output.stdout)
+}
+
+/// Aísla el subproceso de variables Git heredadas de otras carpetas.
+///
+/// No cambia el entorno global de la aplicación ni las variables de Terminal.
+/// Sólo configura el programa hijo antes de arrancarlo.
+fn configure_git_environment(command: &mut Command) {
+    // El index no debe actualizarse por optimizaciones de consulta.
+    command
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_PAGER", "cat")
+        // Git puede descargar objetos durante una lectura en clones parciales.
+        .env("GIT_NO_LAZY_FETCH", "1")
+        // No leer el repositorio de otra sesión de Terminal accidentalmente.
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES");
 }
 
 /// Interpreta el prefijo ~/ de macOS/Linux sin recurrir a un shell.
@@ -534,8 +541,9 @@ mod tests {
             .arg(&fixture.root)
             .arg("rev-parse")
             .arg("--show-toplevel")
-            .env("GIT_DIR", "/no/existe/.git")
-            .env_remove("GIT_DIR");
+            .env("GIT_DIR", "/no/existe/.git");
+        // Invocamos la misma política que utiliza run_git en producción.
+        configure_git_environment(&mut command);
         let output = command.output().expect("Git disponible");
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout)
