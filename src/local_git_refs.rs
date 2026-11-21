@@ -330,6 +330,8 @@ mod tests {
                 .arg("core.hooksPath=/dev/null")
                 .arg("-c")
                 .arg("commit.gpgsign=false")
+                .arg("-c")
+                .arg("tag.gpgSign=false")
                 .args(args)
                 .env_remove("GIT_DIR")
                 .env_remove("GIT_INDEX_FILE")
