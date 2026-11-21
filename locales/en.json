@@ -68,7 +68,7 @@
   "col_act_action": "Action",
   "local_title": "Local Git · Repository explorer",
   "tab_local_git": "💻 Local Git",
-  "local_readonly_note": "E1: read-only. No GitHub connection, commits, checkout, push or file changes.",
+  "local_readonly_note": "E2: inspect local Git; stage files or create local commits only after preview and confirmation. No push or discarded changes.",
   "local_path_hint": "Repository path, for example ~/Projects/gitcraft",
   "local_open": "📂 Open",
   "local_refresh": "🔄 Refresh",
@@ -106,5 +106,8 @@
   "e2_confirm_title": "Confirm local Git action",
   "e2_confirm_notice": "Review files and branch. Git state is checked again before writing; if it changed, the action is rejected.",
   "e2_confirm": "Confirm action",
-  "e2_cancel": "Cancel without changes"
+  "e2_cancel": "Cancel without changes",
+  "e2_notice_staged": "File staged",
+  "e2_notice_unstaged": "Unstaged without deleting the file",
+  "e2_notice_committed": "Local commit created; nothing was pushed."
 }
