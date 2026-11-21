@@ -177,6 +177,7 @@ impl GitCraftApp {
     /// Cierra la sesión, borra el PAT en memoria e invalida respuestas pendientes.
     pub fn disconnect_github(&mut self) {
         self.auth_generation = self.auth_generation.wrapping_add(1);
+        self.is_loading = false;
         self.saved_token.clear();
         self.mcp_token_authorized_endpoint = None;
         self.user = None;
@@ -218,6 +219,10 @@ impl GitCraftApp {
         self.opened_file_sha.clear();
         self.opened_file_content.clear();
         self.file_request = None;
+        // Limpiamos información antigua mientras se descargan los datos del nuevo repo.
+        self.branches.clear();
+        self.dir_entries.clear();
+        self.mgmt_data = RepoManagementData::default();
         self.refresh_branches(ctx.clone());
         self.load_directory(ctx.clone());
         self.load_management(ctx);
@@ -247,6 +252,8 @@ impl GitCraftApp {
         let tx = self.tx.clone().unwrap();
         let key = self.new_repo_request(&name, &branch, &path);
         self.directory_request = Some(key.clone());
+        // Cambiar de directorio hace obsoleta cualquier carga de archivo pendiente.
+        self.file_request = None;
         spawn_task(ctx, async move {
             let result = fetch_directory(token, name, branch, path).await;
             let _ = tx.send(AsyncEvent::Directory(key, result));
