@@ -117,11 +117,23 @@ async fn send_mcp_session(
                 let sys_path = std::env::var("PATH").unwrap_or_default();
                 let full_path = format!("/opt/homebrew/bin:/usr/local/bin:{}", sys_path);
 
-                let mut child = Command::new(prog)
-                    .args(args)
+                // Eliminamos explícitamente posibles tokens heredados del proceso padre.
+                // Un servidor MCP no autorizado nunca recibe automáticamente credenciales GitHub.
+                let mut command = Command::new(prog);
+                command.args(args)
                     .env("PATH", full_path)
-                    .env("GITHUB_PERSONAL_ACCESS_TOKEN", github_token.trim())
-                    .env("GITHUB_TOKEN", github_token.trim())
+                    .env_remove("GITHUB_PERSONAL_ACCESS_TOKEN")
+                    .env_remove("GITHUB_TOKEN")
+                    .env_remove("GH_TOKEN");
+
+                // Sólo cuando el usuario ha autorizado este servidor se añade el PAT.
+                // Nunca se escribe el token en el comando, argumentos ni mensajes de error.
+                if !github_token.trim().is_empty() {
+                    command.env("GITHUB_PERSONAL_ACCESS_TOKEN", github_token.trim())
+                           .env("GITHUB_TOKEN", github_token.trim());
+                }
+
+                let mut child = command
                     .stdin(std::process::Stdio::piped())
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
