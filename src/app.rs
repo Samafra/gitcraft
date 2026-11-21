@@ -255,7 +255,24 @@ impl eframe::App for GitCraftApp {
                 AsyncEvent::Directory(Ok(d)) => { self.dir_entries = d; }
                 AsyncEvent::FileLoaded(p, Ok((txt, sha))) => { self.opened_file_path = Some(p); self.opened_file_content = txt; self.opened_file_sha = sha; }
                 AsyncEvent::CommitDone(Ok(s)) => { self.opened_file_sha = s; self.commit_message.clear(); self.status_notice = Some((self.i18n.t(self.language, "commit_success").into(), false)); }
-                AsyncEvent::BranchCreated(Ok(())) => { self.current_branch = self.new_branch_name.trim().to_string(); self.new_branch_name.clear(); self.load_branches_and_root(ctx.clone()); }
+                AsyncEvent::BranchCreated(Ok(())) => {
+                    // La nueva rama ya existe en GitHub. Mostrar su contenido sin restablecer
+                    // la rama predeterminada (lo cual ocurriría con load_branches_and_root).
+                    self.current_branch = self.new_branch_name.trim().to_string();
+                    self.new_branch_name.clear();
+                    self.current_path.clear();
+                    self.opened_file_path = None;
+                    self.opened_file_content.clear();
+                    self.opened_file_sha.clear();
+                    // Recargar ramas sin cambiar la rama que acabamos de seleccionar.
+                    if let Some(repo) = &self.selected_repo {
+                        let (token, name, tx) = (self.saved_token.clone(), repo.full_name.clone(), self.tx.clone().unwrap());
+                        spawn_task(ctx.clone(), async move {
+                            let _ = tx.send(AsyncEvent::Branches(fetch_branches(token, name).await));
+                        });
+                    }
+                    self.load_directory(ctx.clone());
+                }
                 AsyncEvent::ManagementLoaded(Ok(d)) => { self.mgmt_data = d; }
                 AsyncEvent::MgmtActionDone(Ok(())) => { self.load_management(ctx.clone()); }
                 AsyncEvent::McpToolsLoaded(Ok(tools)) => { if let Some(first) = tools.first() { self.mcp_selected_tool = first.name.clone(); } self.mcp_tools = tools; }
