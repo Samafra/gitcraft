@@ -151,7 +151,9 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             ui.label(app.i18n.t(lang, "e3_empty"));
             return;
         };
-        if !matches_root || app.local_repository.as_ref().map(|repo| &repo.root) != Some(&overview.root) {
+        if !matches_root
+            || app.local_repository.as_ref().map(|repo| &repo.root) != Some(&overview.root)
+        {
             ui.label(app.i18n.t(lang, "e3_reload_required"));
             return;
         }
