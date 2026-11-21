@@ -8,12 +8,18 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
     ui.heading(app.i18n.t(lang, "mcp_panel_title"));
     ui.separator();
 
+    // Si cambia el tipo de conexión, se pierde el permiso temporal para compartir el token.
+    let transport_before = app.mcp_transport;
     // Selector de transporte: Stdio (CLI local) o HTTP/JSON-RPC (Web/Remoto).
     ui.horizontal_wrapped(|ui| {
         ui.label(app.i18n.t(lang, "mcp_transport_label"));
         ui.selectable_value(&mut app.mcp_transport, McpTransport::Stdio, "Stdio (CLI)");
         ui.selectable_value(&mut app.mcp_transport, McpTransport::Http, "HTTP / JSON-RPC");
     });
+
+    if app.mcp_transport != transport_before {
+        app.mcp_token_authorized_endpoint = None;
+    }
 
     // Resolvemos la carpeta HOME del usuario (/Users/francisco) para que el binario funcione desde cualquier directorio.
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -36,6 +42,10 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
             .show_ui(ui, |ui| {
                 for (label, transport, cmd) in &presets {
                     if ui.selectable_label(app.mcp_endpoint == *cmd, *label).clicked() {
+                        // Un preset diferente requiere autorizar expresamente otra vez.
+                        if app.mcp_transport != *transport || app.mcp_endpoint != *cmd {
+                            app.mcp_token_authorized_endpoint = None;
+                        }
                         app.mcp_transport = *transport;
                         app.mcp_endpoint = cmd.clone();
                     }
@@ -44,11 +54,30 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
     });
 
     // Caja de texto manual (se rellena sola al elegir del desplegable o permite escribir libremente).
-    ui.add(
+    // Editar el comando manualmente invalida el permiso anterior (incluso si se vuelve a escribir).
+    if ui.add(
         egui::TextEdit::singleline(&mut app.mcp_endpoint)
             .desired_width(f32::INFINITY)
             .hint_text(app.i18n.t(lang, "mcp_cmd_hint")),
-    );
+    ).changed() {
+        app.mcp_token_authorized_endpoint = None;
+    }
+
+    // El permiso se concede únicamente al comando Stdio mostrado en pantalla.
+    // Nunca está activado por defecto y no se guarda entre sesiones.
+    if app.mcp_transport == McpTransport::Stdio {
+        let mut share_pat = app.mcp_token_is_authorized();
+        if ui.checkbox(&mut share_pat, "Autorizar envío del token GitHub a este servidor MCP").changed() {
+            app.mcp_token_authorized_endpoint = if share_pat {
+                Some(app.mcp_endpoint.clone())
+            } else {
+                None
+            };
+        }
+        if share_pat {
+            ui.label(egui::RichText::new("Este proceso podrá acceder al token; autoriza sólo servidores de confianza.").small().weak());
+        }
+    }
 
     if ui.button(app.i18n.t(lang, "mcp_connect_btn")).clicked() && !app.mcp_endpoint.trim().is_empty() {
         app.trigger_mcp_discover(ctx.clone());
