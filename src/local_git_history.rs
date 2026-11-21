@@ -131,11 +131,14 @@ pub fn inspect_history(root: &Path) -> Result<GitHistoryOverview, String> {
     let has_commits = run_git(Some(&root), &["rev-parse", "--verify", "HEAD"]).is_ok();
 
     let (graph, revisions) = if has_commits {
+        // El límite es compartido por el grafo y la lista de revisiones;
+        // sus 80 filas representan la misma ventana temporal de commits.
+        let limit = format!("--max-count={MAX_HISTORY_COMMITS}");
         // El grafo de texto lo produce Git: esto evita calcular líneas
         // incorrectas en merges o ramas divergentes.
         let graph = run_git(
             Some(&root),
-            &["log", "--graph", "--all", "--decorate", "--oneline", "--max-count=80"],
+            &["log", "--graph", "--all", "--decorate", "--oneline", &limit],
         )?;
         let log = run_git(
             Some(&root),
@@ -143,7 +146,7 @@ pub fn inspect_history(root: &Path) -> Result<GitHistoryOverview, String> {
                 "log",
                 "--all",
                 "--topo-order",
-                "--max-count=80",
+                &limit,
                 "--format=%H%x00%h%x00%s",
             ],
         )?;
@@ -154,10 +157,16 @@ pub fn inspect_history(root: &Path) -> Result<GitHistoryOverview, String> {
 
     // Git reflog y stash list son consultas: no aplican ni borran entradas.
     let reflog = if has_commits {
-        parse_lines(&run_git(
-            Some(&root),
-            &["reflog", "show", "--max-count=40", "--format=%h %gs"],
-        )?)
+        // Git permite desactivar reflog en ciertos repositorios. Si no está
+        // disponible, el resto del panel se mantiene accesible y esta lista
+        // simplemente queda vacía.
+        parse_lines(
+            &run_git(
+                Some(&root),
+                &["reflog", "show", "--max-count=40", "--format=%h %gs"],
+            )
+            .unwrap_or_default(),
+        )
     } else {
         Vec::new()
     };
