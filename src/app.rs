@@ -45,7 +45,7 @@ pub enum AsyncEvent {
     Directory(RepoRequestKey, Result<Vec<RepoEntry>, String>),
     FileLoaded(RepoRequestKey, Result<(String, String), String>),
     CommitDone(RepoRequestKey, Result<String, String>),
-    BranchCreated(String, String, Result<(), String>),
+    BranchCreated(RepoRequestKey, Result<(), String>),
     ManagementLoaded(RepoRequestKey, Result<RepoManagementData, String>),
     MgmtActionDone(String, Result<(), String>),
     McpToolsLoaded(Result<Vec<McpTool>, String>),
@@ -104,6 +104,7 @@ pub struct GitCraftApp {
     #[serde(skip)] pub directory_request: Option<RepoRequestKey>,
     #[serde(skip)] pub file_request: Option<RepoRequestKey>,
     #[serde(skip)] pub commit_request: Option<RepoRequestKey>,
+    #[serde(skip)] pub branch_create_request: Option<RepoRequestKey>,
     #[serde(skip)] pub management_request: Option<RepoRequestKey>,
     #[serde(skip)] tx: Option<Sender<AsyncEvent>>,
     #[serde(skip)] rx: Option<Receiver<AsyncEvent>>,
@@ -125,7 +126,8 @@ impl Default for GitCraftApp {
             mcp_token_authorized_endpoint: None,
             mcp_tools: Vec::new(), mcp_selected_tool: String::new(), mcp_tool_args: "{}".into(), mcp_last_output: String::new(),
             request_generation: 0, auth_generation: 0, branches_request: None,
-            directory_request: None, file_request: None, commit_request: None, management_request: None,
+            directory_request: None, file_request: None, commit_request: None,
+            branch_create_request: None, management_request: None,
             tx: Some(tx), rx: Some(rx),
         }
     }
@@ -192,6 +194,7 @@ impl GitCraftApp {
         self.directory_request = None;
         self.file_request = None;
         self.commit_request = None;
+        self.branch_create_request = None;
         self.management_request = None;
         self.mgmt_data = RepoManagementData::default();
     }
@@ -286,9 +289,11 @@ impl GitCraftApp {
         let name = repo.full_name.clone();
         let branch = self.new_branch_name.trim().to_string();
         let (token, tx) = (self.saved_token.clone(), self.tx.clone().unwrap());
+        let key = self.new_repo_request(&name, "", &branch);
+        self.branch_create_request = Some(key.clone());
         spawn_task(ctx, async move {
-            let result = create_branch(token, name.clone(), branch.clone(), sha).await;
-            let _ = tx.send(AsyncEvent::BranchCreated(name, branch, result));
+            let result = create_branch(token, name, branch, sha).await;
+            let _ = tx.send(AsyncEvent::BranchCreated(key, result));
         });
     }
 
@@ -500,17 +505,18 @@ impl eframe::App for GitCraftApp {
                     }
                 }
                 // El nombre creado se obtiene de la solicitud original, no del cuadro editable.
-                AsyncEvent::BranchCreated(repo, branch, result) => {
+                AsyncEvent::BranchCreated(key, result) => {
+                    // Dos creaciones consecutivas pueden terminar en distinto orden;
+                    // sólo la última solicitud debe seleccionar una rama en pantalla.
+                    if !self.is_current_repo_request(&self.branch_create_request, &key) { continue; }
                     match result {
                         Ok(()) => {
-                            if self.selected_repo.as_ref().map(|selected| selected.full_name.as_str()) == Some(repo.as_str()) {
-                                self.select_created_branch(&branch);
-                                self.new_branch_name.clear();
-                                self.refresh_branches(ctx.clone());
-                                self.load_directory(ctx.clone());
-                            }
+                            self.select_created_branch(&key.path);
+                            self.new_branch_name.clear();
+                            self.refresh_branches(ctx.clone());
+                            self.load_directory(ctx.clone());
                         }
-                        Err(error) => self.status_notice = Some((format!("{}: {}", repo, error), true)),
+                        Err(error) => self.status_notice = Some((format!("{}: {}", key.repo, error), true)),
                     }
                 }
                 AsyncEvent::ManagementLoaded(key, result) => {
