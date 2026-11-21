@@ -7,7 +7,7 @@
 
 ## Estado de la etapa
 
-**Implementación aplicada: controles automáticos y siete comprobaciones funcionales básicas de macOS correctos**, según resultados comunicados por el usuario. El commit de formateo `a601a840a759b674ba3a9cdd6c92ec4dfc0af75d` está verificado en GitHub. **E0 todavía no está cerrada en su totalidad:** quedan pruebas de situaciones excepcionales y verificación de otras plataformas/targets. La revisión remota no ejecuta Cargo ni la interfaz gráfica.
+**E0 VALIDADA EN macOS INTEL dentro del alcance probado.** El usuario ha comunicado resultados correctos en compilación, tests, Rustfmt, Clippy, siete pruebas manuales básicas, navegación asíncrona y creación/actualización de una rama en un repositorio de pruebas independiente. Dos tests adicionales de aislamiento MCP con credenciales ficticias también terminaron correctamente. **E0 multiplataforma sigue parcialmente pendiente** (macOS Apple Silicon, Linux, Windows y WebAssembly). Esta validación no implica una auditoría integral de seguridad, ni autoriza modificar `main`. La revisión remota no ha ejecutado Cargo ni la interfaz gráfica.
 
 ## Cambios realizados
 
@@ -56,7 +56,7 @@ Además, comunicó que `cargo fmt --all -- --check`, `cargo check --locked`, `ca
 
 **Verificación remota independiente:** GitHub confirma que `develop` apunta a `a601a840a759b674ba3a9cdd6c92ec4dfc0af75d`, y que `main` continúa en `c208de70e87c7eabf5e5e1fea5546aa1bae43ef4`. Este registro de validación se añade en un commit documental posterior.
 
-**Alcance de esta evidencia:** controles automáticos correctos en el Mac del usuario. No acredita por sí sola pruebas manuales de interfaz ni compatibilidad macOS ARM, Linux, Windows o navegador WASM. El script sólo comprueba WebAssembly si el target está instalado; no consta el resultado específico de ese paso.
+**Alcance de esta evidencia:** controles automáticos correctos en el Mac del usuario. Las pruebas manuales de interfaz se documentan en las secciones siguientes. La evidencia de macOS Intel no acredita por sí sola compatibilidad macOS ARM, Linux, Windows o navegador WASM. El script sólo comprueba WebAssembly si el target está instalado; no consta el resultado específico de ese paso.
 
 ## Evidencia funcional macOS — 21/11/2026
 
@@ -85,15 +85,27 @@ Los pasos completos para ejecutarlos, probar cambios rápidos de repositorio, cr
 
 El usuario volvió a ejecutar `scripts/validar_e0_local.sh` después de corregirse en `develop` los tres detalles de Rustfmt del código MCP. Resultado comunicado: `OK: controles locales terminados sin errores; revisar aparte las pruebas manuales.` El commit de esa corrección es `a31e287321191fb3d4cd7e2d48ca2bc8e8854544`. Los tests fueron ejecutados localmente por el usuario; la revisión remota sólo verifica el código y los commits publicados.
 
-## Pruebas funcionales adicionales pendientes
+## Evidencia de pruebas excepcionales macOS Intel — 21/11/2026
 
-- **Creación remota de una rama y permanencia de la selección** en un repositorio de prueba, sin tocar `Samafra/gitcraft/main`.
-- **Respuesta obsoleta:** alternar rápidamente entre repositorios/ramas/archivos mientras las consultas siguen en curso y verificar que no se mezclan datos; desconectar durante una petición.
-- **Errores de GitHub 403/429:** contrastar la presentación de errores con un escenario de prueba controlado; los tests automatizados de respuestas HTTP ya se ejecutaron satisfactoriamente en macOS según el usuario.
-- **Credenciales MCP en procesos:** la política de entorno quedó validada con dos tests locales utilizando credenciales ficticias (OK); queda fuera del alcance de estos dos tests una auditoría integral de todos los transportes y servidores MCP.
-- **Otras plataformas:** builds y pruebas manuales de macOS ARM, Windows, Linux y WebAssembly según corresponda; la arquitectura web no tiene las mismas capacidades nativas.
+El usuario confirmó expresamente los siguientes resultados, **sin incidencias ni observaciones**:
 
-No ejecutar operaciones destructivas ni crear ramas o commits de prueba dentro de la rama estable.
+- **Navegación asíncrona: OK.** Se verificaron los cambios entre repositorios, ramas, carpetas y archivos, así como el comportamiento de desconexión en la interfaz.
+- **Creación de rama en repositorio de pruebas: OK.** Se creó una rama fuera de `Samafra/gitcraft` y se comprobó que permanecía seleccionada tras actualizarla.
+- **Aislamiento de credenciales MCP: OK.** Dos tests de proceso local con tokens ficticios, 0 fallos.
+- **Revalidación de Cargo: OK.** El script completo `scripts/validar_e0_local.sh` se ejecutó correctamente después de la corrección de Rustfmt.
+- **Errores HTTP 403/429: cubiertos por pruebas automatizadas.** La ejecución completa de `cargo test` pasó; no se afirma haber reproducido esos errores en una sesión gráfica real.
+
+### Compatibilidad por plataforma
+
+| Plataforma | Resultado E0 |
+| --- | --- |
+| **macOS Intel (x86_64)** | **VALIDADA en el alcance comprobado**: Cargo + tests + formato + Clippy + navegación, autenticación, ramas y permisos MCP |
+| macOS Apple Silicon (arm64) | Pendiente de compilación y pruebas en un equipo ARM |
+| Linux | Pendiente de compilación y pruebas en Linux |
+| Windows | Pendiente de compilación y pruebas en Windows |
+| WebAssembly/navegador | Pendiente de evidencia específica de compilación y ejecución web |
+
+**No deben presentarse las demás plataformas como verificadas.** No se modifica `main`; cualquier integración futura requerirá autorización explícita y un punto de recuperación.
 
 ## Verificación adicional realizada sobre el código fuente
 
@@ -101,17 +113,17 @@ No ejecutar operaciones destructivas ni crear ramas o commits de prueba dentro d
 - Un comprobador estático de delimitadores (no un compilador Rust) no detectó llaves, paréntesis ni corchetes desparejados en los siete módulos Rust principales afectados.
 - Se verificó en el código el uso de `#[serde(skip)]` para el PAT, la eliminación predeterminada de las variables de entorno del token en MCP y los nuevos tests de errores HTTP.
 - Los tests del servidor HTTP simulado incluyen un límite de espera para no bloquear indefinidamente la validación.
-- **La revisión remota no ha ejecutado Rust ni probado la aplicación gráficamente.** Sí se recibió el resultado satisfactorio de los controles locales del usuario en macOS. Las siete comprobaciones funcionales básicas fueron confirmadas posteriormente por el usuario; siguen pendientes los casos excepcionales y otros targets.
+- **La revisión remota no ha ejecutado Rust ni probado la aplicación gráficamente.** Sí se recibió el resultado satisfactorio de los controles locales del usuario en macOS. Las siete comprobaciones funcionales básicas y las dos excepcionales (navegación y creación de rama) fueron confirmadas posteriormente por el usuario. Siguen pendientes los otros targets.
 
 ## Riesgos y asuntos pendientes fuera del alcance cerrado de E0
 
 - Revisar e implementar almacenamiento seguro de credenciales nativo si se desea persistencia entre sesiones.
 - Revisión completa del transporte MCP HTTP/SSE y parsing de comandos con espacios.
 - Paginación y límites de la API; las colecciones siguen usando límites por página.
-- Pruebas funcionales de todos los targets macOS Intel/Apple Silicon, Linux, Windows y WASM.
+- Pruebas funcionales de macOS Apple Silicon, Linux, Windows y WASM; macOS Intel está validado en el alcance documentado.
 - Incorporación del motor Git local y su interfaz (etapa E1 y posteriores).
 - `cargo fmt` puede informar de problemas de formato existentes en código anterior; no se debe forzar reformateo masivo sin revisar diferencias.
 
 ## Criterio de cierre
 
-E0 sólo podrá etiquetarse como **VALIDADA** cuando se obtengan resultados correctos de compilación y tests, se revisen las regresiones manuales y quede documentada la compatibilidad por plataforma. No se integrará nada en `main` hasta esa verificación y una autorización explícita.
+**Cierre E0 en macOS Intel: VALIDADO** con resultados de compilación, tests, formato, Clippy y pruebas manuales comunicados por el usuario. **Cierre E0 multiplataforma: PENDIENTE** de verificaciones en los otros targets, reflejados en la matriz. Este cierre parcial permite planificar la etapa E1 en `develop`, pero no constituye autorización para fusionar en `main`. Cualquier integración en `main` exige previamente verificar ambas ramas, crear un punto de rollback recuperable y obtener autorización explícita.
