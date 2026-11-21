@@ -556,6 +556,8 @@ mod tests {
         assert_eq!(state.base_sha, "b".repeat(40));
         assert_eq!(state.target_sha, "a".repeat(40));
         assert_eq!(state.selected_file, "archivo.txt");
+        assert_eq!(state.ref_target, "a".repeat(40));
+        assert_eq!(state.ref_kind, RefKind::Branch);
         assert!(!state.loading);
     }
 
@@ -566,8 +568,11 @@ mod tests {
         state.accept_overview(fixture_overview());
         state.detail = "un diff antiguo".into();
         state.detail_label = "Blame viejo".into();
+        state.ref_name = "referencia-anterior".into();
+        state.ref_kind = RefKind::Tag;
         let previous_overview = state.overview_generation;
         let previous_detail = state.detail_generation;
+        let previous_ref = state.ref_generation;
 
         state.invalidate();
 
@@ -576,6 +581,11 @@ mod tests {
         assert!(state.detail_label.is_empty());
         assert!(state.base_sha.is_empty());
         assert!(state.selected_file.is_empty());
+        assert!(state.ref_name.is_empty());
+        assert!(state.ref_target.is_empty());
+        assert_eq!(state.ref_kind, RefKind::Branch);
+        assert!(state.ref_preview.is_none());
+        assert_ne!(state.ref_generation, previous_ref);
         assert_ne!(state.overview_generation, previous_overview);
         assert_ne!(state.detail_generation, previous_detail);
     }
