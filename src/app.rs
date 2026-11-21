@@ -18,6 +18,13 @@ use crate::local_git::{inspect_repository, read_diff, LocalDiffTarget, LocalRepo
 use crate::local_git_actions::{
     execute_confirmed_action, preview_action, LocalAction, LocalActionPreview,
 };
+// E3-A recopila historial y detalles mediante consultas Git sin escritura.
+#[cfg(not(target_arch = "wasm32"))]
+use crate::local_git_history::{
+    blame_file, compare_commits, inspect_history, GitHistoryOverview,
+};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::ui_local_history::{HistoryDetailRequest, HistoryUiState};
 use crate::mcp_client::{mcp_call_tool, mcp_discover_tools, McpTool, McpTransport};
 use crate::repo_ops::{
     commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content,
@@ -95,6 +102,12 @@ pub enum AsyncEvent {
     /// E2: resultado de una acción confirmada con actualización de datos.
     #[cfg(not(target_arch = "wasm32"))]
     LocalActionFinished(u64, LocalAction, Result<LocalRepository, String>),
+    /// E3-A: lectura de grafo, etiquetas, reflog, stash y ficheros seguidos.
+    #[cfg(not(target_arch = "wasm32"))]
+    HistoryLoaded(u64, Result<GitHistoryOverview, String>),
+    /// E3-A: resultado de comparación o blame, sin modificar Git.
+    #[cfg(not(target_arch = "wasm32"))]
+    HistoryDetailLoaded(u64, Result<String, String>),
 }
 
 /// Estado general de GitCraft: preferencias, sesión y datos que utiliza la interfaz.
@@ -220,6 +233,10 @@ pub struct GitCraftApp {
     #[cfg(not(target_arch = "wasm32"))]
     #[serde(skip)]
     local_action_generation: u64,
+    // E3-A vive sólo en RAM: el grafo y los archivos no se serializan.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub history: HistoryUiState,
     // Identificadores de las peticiones más recientes; pertenecen sólo a esta sesión.
     #[serde(skip)]
     pub request_generation: u64,
@@ -315,6 +332,8 @@ impl Default for GitCraftApp {
             local_commit_message: String::new(),
             #[cfg(not(target_arch = "wasm32"))]
             local_action_generation: 0,
+            #[cfg(not(target_arch = "wasm32"))]
+            history: HistoryUiState::default(),
             request_generation: 0,
             auth_generation: 0,
             branches_request: None,
@@ -435,6 +454,7 @@ impl GitCraftApp {
         self.local_generation = self.local_generation.wrapping_add(1);
         self.local_diff_generation = self.local_diff_generation.wrapping_add(1);
         self.local_action_generation = self.local_action_generation.wrapping_add(1);
+        self.history.invalidate();
         self.local_action_preview = None;
         self.local_action_notice = None;
         self.local_action_loading = false;
@@ -555,6 +575,93 @@ impl GitCraftApp {
         spawn_task(ctx, async move {
             let result = execute_confirmed_action(&preview);
             let _ = tx.send(AsyncEvent::LocalActionFinished(generation, action, result));
+        });
+    }
+
+    /// E3-A: obtiene el grafo y sus referencias exclusivamente mediante lectura.
+    ///
+    /// La petición usa un contador para que resultados de otra carpeta no
+    /// aparezcan después de cambiar de repositorio o actualizar la pantalla.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_advanced_history(&mut self, ctx: egui::Context) {
+        let Some(repository) = &self.local_repository else {
+            return;
+        };
+        if self.local_loading || self.local_action_loading || self.history.loading {
+            return;
+        }
+        let root = repository.root.clone();
+        self.history.invalidate();
+        self.history.loading = true;
+        let generation = self.history.overview_generation;
+        let tx = self.tx.clone().unwrap();
+        spawn_task(ctx, async move {
+            let result = inspect_history(&root);
+            let _ = tx.send(AsyncEvent::HistoryLoaded(generation, result));
+        });
+    }
+
+    /// E3-A: compara SHA seleccionados o consulta blame sobre un archivo seguido.
+    ///
+    /// Aunque los selectores ya restringen las opciones visibles, se vuelve
+    /// a comprobar su pertenencia a la instantánea en memoria antes de pasar
+    /// la petición al motor, evitando entradas obsoletas o manipuladas.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_advanced_detail(
+        &mut self,
+        ctx: egui::Context,
+        request: HistoryDetailRequest,
+    ) {
+        let Some(repository) = &self.local_repository else {
+            return;
+        };
+        if self.local_loading || self.local_action_loading || self.history.detail_loading {
+            return;
+        }
+        let Some(overview) = &self.history.overview else {
+            return;
+        };
+        if overview.root != repository.root {
+            self.history.error = Some("La consulta pertenece a otro repositorio.".into());
+            return;
+        }
+        let permitted = match &request {
+            HistoryDetailRequest::Comparison { left, right } => {
+                overview.revisions.iter().any(|rev| rev.sha == *left)
+                    && overview.revisions.iter().any(|rev| rev.sha == *right)
+                    && left != right
+            }
+            HistoryDetailRequest::Blame(file) => {
+                overview.tracked_files.iter().any(|path| path == file)
+            }
+        };
+        if !permitted {
+            self.history.error = Some("La selección ya no es válida; recarga E3.".into());
+            return;
+        }
+
+        let root = repository.root.clone();
+        self.history.detail_generation = self.history.detail_generation.wrapping_add(1);
+        let generation = self.history.detail_generation;
+        self.history.detail_loading = true;
+        self.history.detail.clear();
+        self.history.error = None;
+        self.history.detail_label = match &request {
+            HistoryDetailRequest::Comparison { left, right } => {
+                format!("Diff {} → {}", &left[..8], &right[..8])
+            }
+            HistoryDetailRequest::Blame(file) => format!("Blame: {}", file),
+        };
+
+        let tx = self.tx.clone().unwrap();
+        spawn_task(ctx, async move {
+            let result = match request {
+                HistoryDetailRequest::Comparison { left, right } => {
+                    compare_commits(&root, &left, &right)
+                }
+                HistoryDetailRequest::Blame(file) => blame_file(&root, &file),
+            };
+            let _ = tx.send(AsyncEvent::HistoryDetailLoaded(generation, result));
         });
     }
 
@@ -1080,6 +1187,9 @@ impl eframe::App for GitCraftApp {
                             self.local_diff_loading = false;
                             self.local_diff_target = None;
                             self.local_diff_text.clear();
+                            // El historial E3-A anterior podría ser distinto después
+                            // de stage, unstage o commit: se descarta y debe recargarse.
+                            self.history.invalidate();
                             self.local_repository = Some(repository);
                             self.local_action_notice = Some(match action {
                                 LocalAction::Stage(path) => {
@@ -1106,6 +1216,37 @@ impl eframe::App for GitCraftApp {
                             self.local_error = None;
                         }
                         Err(error) => self.local_error = Some(error),
+                    }
+                }
+                // E3-A: aceptar sólo la instantánea solicitada más reciente.
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::HistoryLoaded(generation, result) => {
+                    if generation != self.history.overview_generation {
+                        continue;
+                    }
+                    self.history.loading = false;
+                    match result {
+                        Ok(overview) => {
+                            if self.local_repository.as_ref().map(|repo| &repo.root)
+                                == Some(&overview.root)
+                            {
+                                self.history.accept_overview(overview);
+                            }
+                        }
+                        Err(error) => self.history.error = Some(error),
+                    }
+                }
+                // E3-A: al abrir otra carpeta o efectuar un cambio E2,
+                // las generaciones se incrementan y este resultado se descarta.
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::HistoryDetailLoaded(generation, result) => {
+                    if generation != self.history.detail_generation {
+                        continue;
+                    }
+                    self.history.detail_loading = false;
+                    match result {
+                        Ok(text) => self.history.detail = text,
+                        Err(error) => self.history.error = Some(error),
                     }
                 }
                 AsyncEvent::McpToolsLoaded(Ok(tools)) => {
