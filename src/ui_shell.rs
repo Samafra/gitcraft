@@ -306,28 +306,31 @@ fn render_sidebar(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context)
 
         // Cada nombre representa un enlace de navegación. La rama visible
         // nunca se cambia mediante un clic en esta barra lateral.
-        if let Some(repo) = &app.local_repository {
-            let local: Vec<String> = repo
+        // Copiar sólo los nombres antes de construir la clausura: así se
+        // libera el préstamo inmutable de app.local_repository y se permite
+        // cambiar el panel de navegación sin conflicto E0500 de Rust.
+        let local_branches = app.local_repository.as_ref().map(|repo| {
+            let names = repo
                 .branches
                 .iter()
                 .filter(|branch| !branch.remote)
                 .take(12)
                 .map(|branch| branch.name.clone())
-                .collect();
-            let current = repo.head.clone();
+                .collect::<Vec<_>>();
+            (repo.head.clone(), names)
+        });
+        if let Some((current, local)) = local_branches {
             if !local.is_empty() {
                 let group_title = app.i18n.t(lang, "ux_local_branches").to_owned();
+                let hint = app.i18n.t(lang, "ux_no_checkout").to_owned();
                 egui::CollapsingHeader::new(group_title)
                     .default_open(true)
                     .show(ui, |ui| {
                         for name in &local {
                             let marker = if *name == current { "● " } else { "   " };
                             if ui
-                                .selectable_label(
-                                    false,
-                                    format!("{}{}", marker, name),
-                                )
-                                .on_hover_text(app.i18n.t(lang, "ux_no_checkout"))
+                                .selectable_label(false, format!("{}{}", marker, name))
+                                .on_hover_text(&hint)
                                 .clicked()
                             {
                                 select_workspace(app, WorkspacePane::Branches, ctx);
