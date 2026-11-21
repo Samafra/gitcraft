@@ -15,6 +15,7 @@
 5. Objetivo: cliente **Git** de funcionalidad comparable a SourceTree. **Mercurial queda expresamente excluido.**
 6. No aplicar operaciones destructivas (reset hard, discard, clean, force push, rebase en curso) sin previsualización y confirmación explícita.
 7. No dar por válida una plataforma sin pruebas ejecutadas en esa plataforma.
+8. Todo código nuevo o modificado debe quedar **ampliamente comentado en español y explicado para lectores sin conocimientos de Rust**: objetivos de cada módulo, documentación `///` de elementos públicos, descripción de entradas y resultados, explicación de funciones y bloques relevantes, errores, decisiones y conceptos de Rust. Los comentarios serán didácticos, precisos y se mantendrán actualizados; evitar texto redundante o engañoso. Esta norma se desarrolla en `AGENTS.md` y forma parte de los criterios obligatorios de revisión.
 
 ## 2. Inventario actual
 
