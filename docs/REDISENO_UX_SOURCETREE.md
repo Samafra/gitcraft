@@ -100,6 +100,45 @@ OK: controles automáticos UX superados; pruebas visuales pendientes.
 El script comprueba compilación, tests de interfaz, regresiones E0–E3-B,
 Clippy y, condicionalmente, WebAssembly; controla que no cambie HEAD.
 
+## Preparar un repositorio temporal para la interfaz
+
+Este bloque crea datos de prueba sólo en una carpeta nueva de /tmp, nunca
+en la carpeta GitCraft del proyecto. Mantener la variable UX_TEST en la
+misma Terminal durante las verificaciones:
+
+~~~bash
+UX_TEST="$(mktemp -d /tmp/gitcraft-ux-manual.XXXXXX)"
+git -C "$UX_TEST" init -q
+git -C "$UX_TEST" symbolic-ref HEAD refs/heads/prueba-ux
+git -C "$UX_TEST" config user.name "GitCraft UX Prueba"
+git -C "$UX_TEST" config user.email "gitcraft-ux@example.invalid"
+printf 'primera versión\n' > "$UX_TEST/ejemplo.txt"
+git -C "$UX_TEST" add -- ejemplo.txt
+git -C "$UX_TEST" -c core.hooksPath=/dev/null -c commit.gpgsign=false commit -qm "Primer commit UX"
+printf 'segunda versión\n' > "$UX_TEST/ejemplo.txt"
+git -C "$UX_TEST" add -- ejemplo.txt
+git -C "$UX_TEST" -c core.hooksPath=/dev/null -c commit.gpgsign=false commit -qm "Segundo commit UX"
+printf 'cambio sin preparar\n' >> "$UX_TEST/ejemplo.txt"
+printf 'archivo nuevo\n' > "$UX_TEST/nuevo archivo.txt"
+printf 'REPOSITORIO UX: %s\n' "$UX_TEST"
+git -C "$UX_TEST" status --short
+~~~
+
+Estado esperado:
+
+~~~text
+ M ejemplo.txt
+?? nuevo archivo.txt
+~~~
+
+Después de las pruebas, comprobar que GitCraft original sigue intacto:
+
+~~~bash
+cd ~/Projects/gitcraft
+git status -sb
+git log -1 --oneline
+~~~
+
 ## Pruebas visuales después de superar Cargo
 
 1. Abrir GitCraft con cargo run --locked. En 1200×780 comprobar la nueva
