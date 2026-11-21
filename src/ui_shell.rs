@@ -540,7 +540,8 @@ fn render_references_page(
                                     ui.label("○");
                                 }
                                 ui.monospace(&branch.name);
-                                ui.label(format!("· {}", &branch.commit[..8.min(branch.commit.len())]));
+                                let short_sha = &branch.commit[..8.min(branch.commit.len())];
+                                ui.label(format!("· {}", short_sha));
                             });
                         }
                         if total == 0 {
