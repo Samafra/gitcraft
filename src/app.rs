@@ -23,15 +23,31 @@ pub enum RepoSortColumn {
     UpdatedAt,
 }
 
+/// Identifica la petición que obtuvo un resultado asíncrono.
+/// Un resultado antiguo sólo es aplicable si pertenece al repositorio y petición actuales.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoRequestKey {
+    /// Número único que permite distinguir peticiones sucesivas, aunque sean al mismo archivo.
+    pub id: u64,
+    /// Identificador completo del repositorio, por ejemplo «Samafra/gitcraft».
+    pub repo: String,
+    /// Rama consultada; puede quedar vacía cuando no importa para esta petición.
+    pub branch: String,
+    /// Carpeta o archivo consultado; puede quedar vacío si no aplica.
+    pub path: String,
+}
+
+/// Resultados que llegan a la interfaz desde tareas ejecutadas en paralelo.
+/// Cada respuesta de un repositorio incluye su identidad para evitar cruces de datos.
 pub enum AsyncEvent {
-    UserAndRepos(Result<(GitHubUser, Vec<GitHubRepo>), String>),
-    Branches(Result<Vec<GitBranch>, String>),
-    Directory(Result<Vec<RepoEntry>, String>),
-    FileLoaded(String, Result<(String, String), String>),
-    CommitDone(Result<String, String>),
-    BranchCreated(Result<(), String>),
-    ManagementLoaded(Result<RepoManagementData, String>),
-    MgmtActionDone(Result<(), String>),
+    UserAndRepos(u64, Result<(GitHubUser, Vec<GitHubRepo>), String>),
+    Branches(RepoRequestKey, Result<Vec<GitBranch>, String>),
+    Directory(RepoRequestKey, Result<Vec<RepoEntry>, String>),
+    FileLoaded(RepoRequestKey, Result<(String, String), String>),
+    CommitDone(RepoRequestKey, Result<String, String>),
+    BranchCreated(String, String, Result<(), String>),
+    ManagementLoaded(RepoRequestKey, Result<RepoManagementData, String>),
+    MgmtActionDone(String, Result<(), String>),
     McpToolsLoaded(Result<Vec<McpTool>, String>),
     McpCallResult(Result<String, String>),
 }
@@ -81,6 +97,14 @@ pub struct GitCraftApp {
     #[serde(skip)] pub mcp_selected_tool: String,
     #[serde(skip)] pub mcp_tool_args: String,
     #[serde(skip)] pub mcp_last_output: String,
+    // Identificadores de las peticiones más recientes; pertenecen sólo a esta sesión.
+    #[serde(skip)] pub request_generation: u64,
+    #[serde(skip)] pub auth_generation: u64,
+    #[serde(skip)] pub branches_request: Option<RepoRequestKey>,
+    #[serde(skip)] pub directory_request: Option<RepoRequestKey>,
+    #[serde(skip)] pub file_request: Option<RepoRequestKey>,
+    #[serde(skip)] pub commit_request: Option<RepoRequestKey>,
+    #[serde(skip)] pub management_request: Option<RepoRequestKey>,
     #[serde(skip)] tx: Option<Sender<AsyncEvent>>,
     #[serde(skip)] rx: Option<Receiver<AsyncEvent>>,
 }
@@ -100,6 +124,8 @@ impl Default for GitCraftApp {
             mcp_transport: McpTransport::Stdio, mcp_endpoint: "npx -y @modelcontextprotocol/server-github".into(),
             mcp_token_authorized_endpoint: None,
             mcp_tools: Vec::new(), mcp_selected_tool: String::new(), mcp_tool_args: "{}".into(), mcp_last_output: String::new(),
+            request_generation: 0, auth_generation: 0, branches_request: None,
+            directory_request: None, file_request: None, commit_request: None, management_request: None,
             tx: Some(tx), rx: Some(rx),
         }
     }
@@ -129,71 +155,228 @@ impl GitCraftApp {
         app
     }
     fn apply_theme(&self, ctx: &egui::Context) { ctx.set_visuals(if self.dark_mode { egui::Visuals::dark() } else { egui::Visuals::light() }); }
+    /// Genera un marcador único para una nueva petición a GitHub.
+    /// El contador se incrementa para que una respuesta anterior nunca suplante a la última.
+    fn new_repo_request(&mut self, repo: &str, branch: &str, path: &str) -> RepoRequestKey {
+        self.request_generation = self.request_generation.wrapping_add(1);
+        RepoRequestKey {
+            id: self.request_generation,
+            repo: repo.to_string(),
+            branch: branch.to_string(),
+            path: path.to_string(),
+        }
+    }
+
+    /// Comprueba que la respuesta corresponde tanto al repositorio seleccionado
+    /// como al marcador de la petición más reciente de esa clase.
+    fn is_current_repo_request(&self, latest: &Option<RepoRequestKey>, key: &RepoRequestKey) -> bool {
+        latest.as_ref() == Some(key)
+            && self.selected_repo.as_ref().map(|repo| repo.full_name.as_str()) == Some(key.repo.as_str())
+    }
+
+    /// Cierra la sesión, borra el PAT en memoria e invalida respuestas pendientes.
+    pub fn disconnect_github(&mut self) {
+        self.auth_generation = self.auth_generation.wrapping_add(1);
+        self.saved_token.clear();
+        self.mcp_token_authorized_endpoint = None;
+        self.user = None;
+        self.repos.clear();
+        self.selected_repo = None;
+        self.branches.clear();
+        self.dir_entries.clear();
+        self.opened_file_path = None;
+        self.opened_file_sha.clear();
+        self.opened_file_content.clear();
+        self.branches_request = None;
+        self.directory_request = None;
+        self.file_request = None;
+        self.commit_request = None;
+        self.management_request = None;
+        self.mgmt_data = RepoManagementData::default();
+    }
+
+    /// Inicia una conexión nueva: sólo su respuesta puede establecer la sesión.
     pub fn trigger_github_sync(&mut self, ctx: egui::Context) {
-        self.is_loading = true; let (t, tx) = (self.saved_token.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::UserAndRepos(fetch_user_and_repos(t).await)); });
+        self.is_loading = true;
+        self.auth_generation = self.auth_generation.wrapping_add(1);
+        let generation = self.auth_generation;
+        let (token, tx) = (self.saved_token.clone(), self.tx.clone().unwrap());
+        spawn_task(ctx, async move {
+            let result = fetch_user_and_repos(token).await;
+            let _ = tx.send(AsyncEvent::UserAndRepos(generation, result));
+        });
     }
+
+    /// Cambia a la rama inicial de un repositorio recién seleccionado y carga sus datos.
+    /// Esta función SÍ selecciona la rama predeterminada, pero no debe usarse para refrescar.
     pub fn load_branches_and_root(&mut self, ctx: egui::Context) {
-        let Some(r) = &self.selected_repo else { return };
-        self.current_branch = r.default_branch.clone(); self.new_pr_base = r.default_branch.clone();
-        self.current_path.clear(); self.opened_file_path = None;
-        let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx.clone(), async move { let _ = tx.send(AsyncEvent::Branches(fetch_branches(t, f).await)); });
-        self.load_directory(ctx.clone()); self.load_management(ctx);
+        let Some(repo) = &self.selected_repo else { return };
+        self.current_branch = repo.default_branch.clone();
+        self.new_pr_base = repo.default_branch.clone();
+        self.current_path.clear();
+        self.opened_file_path = None;
+        self.opened_file_sha.clear();
+        self.opened_file_content.clear();
+        self.file_request = None;
+        self.refresh_branches(ctx.clone());
+        self.load_directory(ctx.clone());
+        self.load_management(ctx);
     }
+
+    /// Vuelve a leer las ramas sin cambiar la rama actualmente seleccionada.
+    pub fn refresh_branches(&mut self, ctx: egui::Context) {
+        let Some(repo) = &self.selected_repo else { return };
+        let name = repo.full_name.clone();
+        let token = self.saved_token.clone();
+        let tx = self.tx.clone().unwrap();
+        let key = self.new_repo_request(&name, "", "");
+        self.branches_request = Some(key.clone());
+        spawn_task(ctx, async move {
+            let result = fetch_branches(token, name).await;
+            let _ = tx.send(AsyncEvent::Branches(key, result));
+        });
+    }
+
+    /// Lee una carpeta de la rama seleccionada y marca qué petición sigue vigente.
     pub fn load_directory(&mut self, ctx: egui::Context) {
-        let Some(r) = &self.selected_repo else { return };
-        let (t, f, b, p, tx) = (self.saved_token.clone(), r.full_name.clone(), self.current_branch.clone(), self.current_path.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::Directory(fetch_directory(t, f, b, p).await)); });
+        let Some(repo) = &self.selected_repo else { return };
+        let name = repo.full_name.clone();
+        let branch = self.current_branch.clone();
+        let path = self.current_path.clone();
+        let token = self.saved_token.clone();
+        let tx = self.tx.clone().unwrap();
+        let key = self.new_repo_request(&name, &branch, &path);
+        self.directory_request = Some(key.clone());
+        spawn_task(ctx, async move {
+            let result = fetch_directory(token, name, branch, path).await;
+            let _ = tx.send(AsyncEvent::Directory(key, result));
+        });
     }
+
+    /// Abre un archivo remoto; las respuestas de archivos anteriores se descartan.
     pub fn open_file(&mut self, ctx: egui::Context, path: String) {
-        let Some(r) = &self.selected_repo else { return };
-        let (t, f, b, tx, pc) = (self.saved_token.clone(), r.full_name.clone(), self.current_branch.clone(), self.tx.clone().unwrap(), path.clone());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::FileLoaded(pc, fetch_file_content(t, f, b, path).await)); });
+        let Some(repo) = &self.selected_repo else { return };
+        let name = repo.full_name.clone();
+        let branch = self.current_branch.clone();
+        let token = self.saved_token.clone();
+        let tx = self.tx.clone().unwrap();
+        let key = self.new_repo_request(&name, &branch, &path);
+        self.file_request = Some(key.clone());
+        spawn_task(ctx, async move {
+            let result = fetch_file_content(token, name, branch, path).await;
+            let _ = tx.send(AsyncEvent::FileLoaded(key, result));
+        });
     }
+
+    /// Crea una rama en GitHub conservando su nombre y repositorio originales.
+    /// Aunque el usuario cambie de repositorio antes de terminar, no se modificará el actual.
     pub fn trigger_create_branch(&mut self, ctx: egui::Context) {
-        let Some(r) = &self.selected_repo else { return };
-        let sha = self.branches.iter().find(|b| b.name == self.current_branch).map(|b| b.commit.sha.clone()).unwrap_or_default();
-        let (t, f, nb, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_branch_name.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::BranchCreated(create_branch(t, f, nb, sha).await)); });
+        let Some(repo) = &self.selected_repo else { return };
+        let sha = self.branches.iter()
+            .find(|branch| branch.name == self.current_branch)
+            .map(|branch| branch.commit.sha.clone())
+            .unwrap_or_default();
+        let name = repo.full_name.clone();
+        let branch = self.new_branch_name.trim().to_string();
+        let (token, tx) = (self.saved_token.clone(), self.tx.clone().unwrap());
+        spawn_task(ctx, async move {
+            let result = create_branch(token, name.clone(), branch.clone(), sha).await;
+            let _ = tx.send(AsyncEvent::BranchCreated(name, branch, result));
+        });
     }
+
+    /// Tras crear una rama, cambia de selección y cierra el archivo abierto.
+    /// No llama a load_branches_and_root porque esa función volvería a main/default.
+    fn select_created_branch(&mut self, branch: &str) {
+        self.current_branch = branch.to_string();
+        self.current_path.clear();
+        self.opened_file_path = None;
+        self.opened_file_content.clear();
+        self.opened_file_sha.clear();
+        self.file_request = None;
+    }
+
+    /// Publica un archivo remoto; el SHA resultante sólo se aplica al editor original.
     pub fn trigger_commit_push(&mut self, ctx: egui::Context) {
-        let (Some(r), Some(p)) = (&self.selected_repo, &self.opened_file_path) else { return };
-        let msg = if self.commit_message.trim().is_empty() { format!("Update {}", p) } else { self.commit_message.clone() };
-        let (t, f, b, p, s, c, tx) = (self.saved_token.clone(), r.full_name.clone(), self.current_branch.clone(), p.clone(), self.opened_file_sha.clone(), self.opened_file_content.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::CommitDone(commit_file_push(t, f, b, p, s, c, msg).await)); });
+        let (Some(repo), Some(path)) = (&self.selected_repo, &self.opened_file_path) else { return };
+        let msg = if self.commit_message.trim().is_empty() {
+            format!("Update {}", path)
+        } else {
+            self.commit_message.clone()
+        };
+        let name = repo.full_name.clone();
+        let path = path.clone();
+        let branch = self.current_branch.clone();
+        let sha = self.opened_file_sha.clone();
+        let content = self.opened_file_content.clone();
+        let (token, tx) = (self.saved_token.clone(), self.tx.clone().unwrap());
+        let key = self.new_repo_request(&name, &branch, &path);
+        self.commit_request = Some(key.clone());
+        spawn_task(ctx, async move {
+            let result = commit_file_push(token, name, branch, path, sha, content, msg).await;
+            let _ = tx.send(AsyncEvent::CommitDone(key, result));
+        });
     }
+
+    /// Recupera los datos de gestión remota, asociando la respuesta al repositorio correcto.
     pub fn load_management(&mut self, ctx: egui::Context) {
-        let Some(r) = &self.selected_repo else { return };
-        let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::ManagementLoaded(fetch_management_data(t, f).await)); });
+        let Some(repo) = &self.selected_repo else { return };
+        let name = repo.full_name.clone();
+        let token = self.saved_token.clone();
+        let tx = self.tx.clone().unwrap();
+        let key = self.new_repo_request(&name, "", "");
+        self.management_request = Some(key.clone());
+        spawn_task(ctx, async move {
+            let result = fetch_management_data(token, name).await;
+            let _ = tx.send(AsyncEvent::ManagementLoaded(key, result));
+        });
     }
     pub fn trigger_create_pr(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, ti, h, b, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_pr_title.clone(), self.new_pr_head.clone(), self.new_pr_base.clone(), self.tx.clone().unwrap());
         self.new_pr_title.clear();
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::MgmtActionDone(create_pr(t, f, ti, h, b).await)); });
+        spawn_task(ctx, async move {
+            let repo_name = f.clone();
+            let result = create_pr(t, f, ti, h, b).await;
+            let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
+        });
     }
     pub fn trigger_merge_pr(&mut self, ctx: egui::Context, num: u64) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::MgmtActionDone(merge_pr(t, f, num).await)); });
+        spawn_task(ctx, async move {
+            let repo_name = f.clone();
+            let result = merge_pr(t, f, num).await;
+            let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
+        });
     }
     pub fn trigger_create_issue(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, ti, bo, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_issue_title.clone(), self.new_issue_body.clone(), self.tx.clone().unwrap());
         self.new_issue_title.clear(); self.new_issue_body.clear();
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::MgmtActionDone(create_issue(t, f, ti, bo).await)); });
+        spawn_task(ctx, async move {
+            let repo_name = f.clone();
+            let result = create_issue(t, f, ti, bo).await;
+            let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
+        });
     }
     pub fn trigger_close_issue(&mut self, ctx: egui::Context, num: u64) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::MgmtActionDone(close_issue(t, f, num).await)); });
+        spawn_task(ctx, async move {
+            let repo_name = f.clone();
+            let result = close_issue(t, f, num).await;
+            let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
+        });
     }
     pub fn trigger_rerun_workflow(&mut self, ctx: egui::Context, id: u64) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::MgmtActionDone(rerun_workflow(t, f, id).await)); });
+        spawn_task(ctx, async move {
+            let repo_name = f.clone();
+            let result = rerun_workflow(t, f, id).await;
+            let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
+        });
     }
     /// Indica si el usuario ha autorizado compartir el token con el comando MCP actual.
     /// El permiso sólo existe durante esta sesión y se invalida al cambiar el destino.
@@ -222,7 +405,11 @@ impl GitCraftApp {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tg, nm, bo, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_rel_tag.clone(), self.new_rel_name.clone(), self.new_rel_body.clone(), self.tx.clone().unwrap());
         self.new_rel_tag.clear(); self.new_rel_name.clear(); self.new_rel_body.clear();
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::MgmtActionDone(create_release(t, f, tg, nm, bo).await)); });
+        spawn_task(ctx, async move {
+            let repo_name = f.clone();
+            let result = create_release(t, f, tg, nm, bo).await;
+            let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
+        });
     }
 }
 
@@ -235,49 +422,116 @@ impl eframe::App for GitCraftApp {
         for ev in pending {
             self.is_loading = false;
             match ev {
-                AsyncEvent::UserAndRepos(Ok((u, r))) => { self.user = Some(u); self.repos = r; self.status_notice = None; }
-                AsyncEvent::UserAndRepos(Err(e)) | AsyncEvent::Branches(Err(e)) | AsyncEvent::Directory(Err(e))
-
-                | AsyncEvent::FileLoaded(_, Err(e)) | AsyncEvent::CommitDone(Err(e)) | AsyncEvent::BranchCreated(Err(e))
-                | AsyncEvent::ManagementLoaded(Err(e)) | AsyncEvent::MgmtActionDone(Err(e)) => { self.status_notice = Some((e, true)); }
-                AsyncEvent::Branches(Ok(b)) => {
-                    // Si la rama origen aún no está elegida, preseleccionamos la primera rama distinta a la destino (o la primera disponible).
-                    if self.new_pr_head.is_empty() || !b.iter().any(|br| br.name == self.new_pr_head) {
-                        self.new_pr_head = b
-                            .iter()
-                            .find(|br| br.name != self.new_pr_base)
-                            .or_else(|| b.first())
-                            .map(|br| br.name.clone())
-                            .unwrap_or_default();
+                // Un login antiguo ya no puede restaurar una sesión cerrada.
+                AsyncEvent::UserAndRepos(generation, result) => {
+                    if generation != self.auth_generation { continue; }
+                    match result {
+                        Ok((user, repos)) => {
+                            self.user = Some(user);
+                            self.repos = repos;
+                            self.status_notice = None;
+                        }
+                        Err(error) => self.status_notice = Some((error, true)),
                     }
-                    self.branches = b;
                 }
-                AsyncEvent::Directory(Ok(d)) => { self.dir_entries = d; }
-                AsyncEvent::FileLoaded(p, Ok((txt, sha))) => { self.opened_file_path = Some(p); self.opened_file_content = txt; self.opened_file_sha = sha; }
-                AsyncEvent::CommitDone(Ok(s)) => { self.opened_file_sha = s; self.commit_message.clear(); self.status_notice = Some((self.i18n.t(self.language, "commit_success").into(), false)); }
-                AsyncEvent::BranchCreated(Ok(())) => {
-                    // La nueva rama ya existe en GitHub. Mostrar su contenido sin restablecer
-                    // la rama predeterminada (lo cual ocurriría con load_branches_and_root).
-                    self.current_branch = self.new_branch_name.trim().to_string();
-                    self.new_branch_name.clear();
-                    self.current_path.clear();
-                    self.opened_file_path = None;
-                    self.opened_file_content.clear();
-                    self.opened_file_sha.clear();
-                    // Recargar ramas sin cambiar la rama que acabamos de seleccionar.
-                    if let Some(repo) = &self.selected_repo {
-                        let (token, name, tx) = (self.saved_token.clone(), repo.full_name.clone(), self.tx.clone().unwrap());
-                        spawn_task(ctx.clone(), async move {
-                            let _ = tx.send(AsyncEvent::Branches(fetch_branches(token, name).await));
-                        });
+                // Sólo se aplican las ramas de la petición vigente para el repo visible.
+                AsyncEvent::Branches(key, result) => {
+                    if !self.is_current_repo_request(&self.branches_request, &key) { continue; }
+                    match result {
+                        Ok(branches) => {
+                            if self.new_pr_head.is_empty()
+                                || !branches.iter().any(|branch| branch.name == self.new_pr_head)
+                            {
+                                self.new_pr_head = branches.iter()
+                                    .find(|branch| branch.name != self.new_pr_base)
+                                    .or_else(|| branches.first())
+                                    .map(|branch| branch.name.clone()).unwrap_or_default();
+                            }
+                            self.branches = branches;
+                        }
+                        Err(error) => self.status_notice = Some((error, true)),
                     }
-                    self.load_directory(ctx.clone());
                 }
-                AsyncEvent::ManagementLoaded(Ok(d)) => { self.mgmt_data = d; }
-                AsyncEvent::MgmtActionDone(Ok(())) => { self.load_management(ctx.clone()); }
-                AsyncEvent::McpToolsLoaded(Ok(tools)) => { if let Some(first) = tools.first() { self.mcp_selected_tool = first.name.clone(); } self.mcp_tools = tools; }
+                // Además del repo, la carpeta y la rama deben seguir siendo las mismas.
+                AsyncEvent::Directory(key, result) => {
+                    if !self.is_current_repo_request(&self.directory_request, &key)
+                        || self.current_branch != key.branch || self.current_path != key.path
+                    { continue; }
+                    match result {
+                        Ok(directory) => self.dir_entries = directory,
+                        Err(error) => self.status_notice = Some((error, true)),
+                    }
+                }
+                // Si el usuario abrió otro archivo o cambió de rama, no se toca su editor.
+                AsyncEvent::FileLoaded(key, result) => {
+                    if !self.is_current_repo_request(&self.file_request, &key)
+                        || self.current_branch != key.branch
+                    { continue; }
+                    match result {
+                        Ok((content, sha)) => {
+                            self.opened_file_path = Some(key.path);
+                            self.opened_file_content = content;
+                            self.opened_file_sha = sha;
+                        }
+                        Err(error) => self.status_notice = Some((error, true)),
+                    }
+                }
+                // El commit puede terminar después de que el usuario navegue a otro sitio.
+                AsyncEvent::CommitDone(key, result) => {
+                    match result {
+                        Ok(sha) => {
+                            if self.is_current_repo_request(&self.commit_request, &key)
+                                && self.current_branch == key.branch
+                                && self.opened_file_path.as_deref() == Some(key.path.as_str())
+                            {
+                                self.opened_file_sha = sha;
+                                self.commit_message.clear();
+                            }
+                            self.status_notice = Some((format!("Commit & Push terminado en {} ({})", key.repo, key.branch), false));
+                        }
+                        Err(error) => self.status_notice = Some((format!("{}: {}", key.repo, error), true)),
+                    }
+                }
+                // El nombre creado se obtiene de la solicitud original, no del cuadro editable.
+                AsyncEvent::BranchCreated(repo, branch, result) => {
+                    match result {
+                        Ok(()) => {
+                            if self.selected_repo.as_ref().map(|selected| selected.full_name.as_str()) == Some(repo.as_str()) {
+                                self.select_created_branch(&branch);
+                                self.new_branch_name.clear();
+                                self.refresh_branches(ctx.clone());
+                                self.load_directory(ctx.clone());
+                            }
+                        }
+                        Err(error) => self.status_notice = Some((format!("{}: {}", repo, error), true)),
+                    }
+                }
+                AsyncEvent::ManagementLoaded(key, result) => {
+                    if !self.is_current_repo_request(&self.management_request, &key) { continue; }
+                    match result {
+                        Ok(data) => self.mgmt_data = data,
+                        Err(error) => self.status_notice = Some((error, true)),
+                    }
+                }
+                // Una acción terminada para otro repo no recarga los datos del repo actual.
+                AsyncEvent::MgmtActionDone(repo, result) => {
+                    match result {
+                        Ok(()) => {
+                            if self.selected_repo.as_ref().map(|selected| selected.full_name.as_str()) == Some(repo.as_str()) {
+                                self.load_management(ctx.clone());
+                            }
+                        }
+                        Err(error) => self.status_notice = Some((format!("{}: {}", repo, error), true)),
+                    }
+                }
+                AsyncEvent::McpToolsLoaded(Ok(tools)) => {
+                    if let Some(first) = tools.first() { self.mcp_selected_tool = first.name.clone(); }
+                    self.mcp_tools = tools;
+                }
                 AsyncEvent::McpCallResult(Ok(out)) => { self.mcp_last_output = out; }
-                AsyncEvent::McpToolsLoaded(Err(e)) | AsyncEvent::McpCallResult(Err(e)) => { self.status_notice = Some((e, true)); }
+                AsyncEvent::McpToolsLoaded(Err(error)) | AsyncEvent::McpCallResult(Err(error)) => {
+                    self.status_notice = Some((error, true));
+                }
             }
         }
 
@@ -358,6 +612,43 @@ mod security_tests {
         let old = serde_json::json!({"saved_token":"secreto_antiguo"});
         let reloaded: GitCraftApp = serde_json::from_value(old).expect("configuración antigua válida");
         assert!(reloaded.saved_token.is_empty());
+    }
+
+    /// Una respuesta de otro repositorio o de una petición antigua se descarta.
+    #[test]
+    fn stale_repo_responses_are_rejected() {
+        let mut app = GitCraftApp::default();
+        app.selected_repo = Some(GitHubRepo { full_name: "Samafra/gitcraft".into(), ..Default::default() });
+        let old = app.new_repo_request("Samafra/gitcraft", "main", "src");
+        app.directory_request = Some(old.clone());
+        assert!(app.is_current_repo_request(&app.directory_request, &old));
+        let newest = app.new_repo_request("Samafra/gitcraft", "main", "src");
+        app.directory_request = Some(newest);
+        assert!(!app.is_current_repo_request(&app.directory_request, &old));
+        app.selected_repo = Some(GitHubRepo { full_name: "Otra/carpeta".into(), ..Default::default() });
+        assert!(!app.is_current_repo_request(&app.directory_request, &old));
+    }
+
+    /// Tras seleccionar la rama recién creada, no se vuelve a la rama por defecto.
+    #[test]
+    fn created_branch_keeps_the_new_selection() {
+        let mut app = GitCraftApp::default();
+        app.select_created_branch("feature/prueba");
+        assert_eq!(app.current_branch, "feature/prueba");
+        assert!(app.opened_file_path.is_none());
+    }
+
+    /// Desconectar anula el permiso MCP y las respuestas de login aún pendientes.
+    #[test]
+    fn disconnect_invalidates_pending_session_and_token_permissions() {
+        let mut app = GitCraftApp::default();
+        app.saved_token = "token_solo_prueba".into();
+        app.mcp_token_authorized_endpoint = Some(app.mcp_endpoint.clone());
+        let before = app.auth_generation;
+        app.disconnect_github();
+        assert!(app.saved_token.is_empty());
+        assert!(app.mcp_token_authorized_endpoint.is_none());
+        assert_ne!(app.auth_generation, before);
     }
 
     /// Nadie recibe un PAT de forma implícita, ni siquiera el servidor MCP por defecto.
