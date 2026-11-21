@@ -17,6 +17,20 @@ use eframe::egui;
 /// editarlo durante el dibujo y evita dos escrituras simultáneas.
 /// ctx permite que el motor avise a egui cuando llega una respuesta.
 pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
+    // La pestaña contiene varias secciones y un grafo potencialmente largo.
+    // Una barra de desplazamiento principal evita ocultar E3-A en portátiles.
+    egui::ScrollArea::vertical()
+        .id_salt("git_local_main_scroll")
+        .show(ui, |ui| {
+            render_local_git_content(app, ui, ctx);
+        });
+}
+
+/// Dibuja el contenido existente E1/E2 y el panel añadido por E3-A.
+///
+/// Rust presta app de forma mutable únicamente mientras se construye este
+/// fotograma, sin guardarlo en callbacks ni mantener referencias asíncronas.
+fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
     ui.heading(app.i18n.t(lang, "local_title"));
     ui.label(
@@ -118,6 +132,10 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             repository.branches.len()
         ));
     });
+
+    // Se deja E3-A cerca del encabezado para encontrarlo incluso cuando
+    // el repositorio tiene muchos archivos modificados o ramas locales.
+    render_history_panel(app, ui, ctx);
 
     // La sección de estado muestra "XY" como lo devuelve Git:
     // X es el índice/staging y Y son los cambios sin preparar.
@@ -450,7 +468,4 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             .small(),
     );
 
-    // E3-A es un panel de lectura aparte. Las acciones de staging E2 y su
-    // confirmación siguen independientes y no pueden activarse desde él.
-    render_history_panel(app, ui, ctx);
 }
