@@ -55,7 +55,10 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             )
             .changed();
         if path_changed {
+            // Las dos autorizaciones de escritura (E2 y E3-B) dejan de ser
+            // válidas cuando cambia la ruta visible del repositorio.
             app.cancel_local_action();
+            app.cancel_local_ref();
         }
         if ui
             .add_enabled(
