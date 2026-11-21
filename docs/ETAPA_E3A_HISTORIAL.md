@@ -52,6 +52,20 @@ tampoco se incorporan aquí. Estas operaciones requieren fases específicas.
 - locales/es.json y locales/en.json — traducciones.
 - scripts/validar_e3a_local.sh — validación reproducible sin GitHub Actions.
 
+## Verificación estática previa y comandos Git
+
+Antes de solicitar la ejecución en macOS, se realizó una revisión estática
+de los archivos Rust y la consistencia de las traducciones ES/EN. Además se
+ejecutaron directamente los comandos Git de E3-A sobre repositorios
+temporales en el entorno de verificación Linux (Git 2.47.3): grafo, listado
+de revisiones con separadores NUL, diff, blame con ruta Unicode, reflog,
+etiquetas, stash y lectura sobre un repositorio sin commits. No se detectó
+un fallo en esos comandos.
+
+**Límite:** estas verificaciones no compilan el nuevo código Rust ni prueban
+la interfaz gráfica. No acreditan todavía E3-A en macOS Intel ni en
+otras plataformas. Rustfmt, Cargo y las pruebas visuales son obligatorios.
+
 ## Pruebas automáticas en macOS Intel
 
 Con GitCraft cerrado:
