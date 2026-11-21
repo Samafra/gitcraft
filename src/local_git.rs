@@ -5,8 +5,9 @@
 //! de comandos. Así, una ruta con espacios o caracteres especiales no se ejecuta
 //! accidentalmente como una instrucción del sistema.
 //!
-//! E1 permite ver el estado, las ramas, el historial y los diffs. No contiene
-//! comandos que creen commits, cambien ramas, borren archivos o publiquen datos.
+//! E1 permite ver el estado, las ramas, el historial y los diffs. El módulo
+//! hermano local_git_actions implementa las escrituras E2 con confirmación,
+//! reutilizando el ejecutor Git común. Ningún subcomando hace push o reset.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -81,6 +82,8 @@ pub enum LocalDiffTarget {
     Staged,
     /// Cambios introducidos por un commit concreto de los del historial.
     Commit(String),
+    /// Diferencias de un archivo específico, separando staged de unstaged.
+    File { path: String, staged: bool },
 }
 
 /// Devuelve la versión del Git instalado o un error claro si no se encuentra.
@@ -101,7 +104,7 @@ pub fn detect_git() -> Result<String, String> {
 ///
 /// La lista de argumentos sólo la construyen las funciones de este módulo,
 /// nunca es un texto arbitrario introducido por la persona usuaria.
-fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
+pub(crate) fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
     let mut command = Command::new("git");
     command
         .arg("--no-optional-locks")
@@ -114,8 +117,8 @@ fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
     }
 
     // Cada subcomando y su argumento se añaden de manera literal, sin shell.
-    // Este paso es imprescindible: si se omite, se invoca Git sin ejecutar
-    // status, log, diff o cualquier otra consulta requerida por E1.
+    // Este paso fue protegido por un test de regresión en E1 y es reutilizado
+    // por las operaciones E2, que sólo se ejecutan tras confirmación.
     command.args(args);
 
     // La política de entorno está separada para que pueda verificarse.
@@ -221,7 +224,7 @@ pub fn inspect_repository(input: &str) -> Result<LocalRepository, String> {
     // espacios, comillas y nombres con saltos de línea sin romper el parseo.
     let status = parse_status(&run_git(
         Some(&root),
-        &["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )?)?;
 
     // Git no consulta la red al mostrar refs/remotes: son referencias locales.
@@ -370,6 +373,33 @@ pub fn read_diff(root: &Path, target: &LocalDiffTarget) -> Result<String, String
                 "--",
             ],
         )?,
+        LocalDiffTarget::File { path, staged } => {
+            // La UI obtiene la ruta de git status, no de comandos escritos.
+            // Validamos que permanezca dentro de la raíz y usamos "--".
+            let candidate = Path::new(path);
+            if path.is_empty()
+                || candidate.is_absolute()
+                || candidate
+                    .components()
+                    .any(|component| !matches!(component, std::path::Component::Normal(_)))
+            {
+                return Err("Ruta de archivo inválida para consultar su diff.".into());
+            }
+            if *staged {
+                run_git(
+                    Some(root),
+                    &[
+                        "diff", "--cached", "--no-ext-diff", "--no-textconv",
+                        "--no-color", "--", path,
+                    ],
+                )?
+            } else {
+                run_git(
+                    Some(root),
+                    &["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--", path],
+                )?
+            }
+        }
         LocalDiffTarget::Commit(sha) => {
             if !(sha.len() == 40 || sha.len() == 64)
                 || !sha.bytes().all(|byte| byte.is_ascii_hexdigit())
