@@ -390,14 +390,26 @@ pub fn read_diff(root: &Path, target: &LocalDiffTarget) -> Result<String, String
                 run_git(
                     Some(root),
                     &[
-                        "diff", "--cached", "--no-ext-diff", "--no-textconv",
-                        "--no-color", "--", path,
+                        "diff",
+                        "--cached",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--no-color",
+                        "--",
+                        path,
                     ],
                 )?
             } else {
                 run_git(
                     Some(root),
-                    &["diff", "--no-ext-diff", "--no-textconv", "--no-color", "--", path],
+                    &[
+                        "diff",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--no-color",
+                        "--",
+                        path,
+                    ],
                 )?
             }
         }

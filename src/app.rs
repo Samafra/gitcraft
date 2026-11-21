@@ -1076,8 +1076,7 @@ impl eframe::App for GitCraftApp {
                     self.local_action_preview = None;
                     match result {
                         Ok(repository) => {
-                            self.local_diff_generation =
-                                self.local_diff_generation.wrapping_add(1);
+                            self.local_diff_generation = self.local_diff_generation.wrapping_add(1);
                             self.local_diff_loading = false;
                             self.local_diff_target = None;
                             self.local_diff_text.clear();
@@ -1099,7 +1098,9 @@ impl eframe::App for GitCraftApp {
                                 }
                                 LocalAction::Commit(_) => {
                                     self.local_commit_message.clear();
-                                    self.i18n.t(self.language, "e2_notice_committed").to_string()
+                                    self.i18n
+                                        .t(self.language, "e2_notice_committed")
+                                        .to_string()
                                 }
                             });
                             self.local_error = None;

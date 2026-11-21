@@ -55,9 +55,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         }
         if ui
             .add_enabled(
-                !app.local_loading
-                    && !app.local_action_loading
-                    && app.local_repository.is_some(),
+                !app.local_loading && !app.local_action_loading && app.local_repository.is_some(),
                 egui::Button::new(app.i18n.t(lang, "local_refresh")),
             )
             .clicked()
@@ -91,8 +89,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
 
     // Hasta volver a pulsar Abrir, una ruta editada aún no es el
     // repositorio que está cargado. No permitir escrituras por error.
-    let path_matches = app.local_repo_input.as_str()
-        == repository.root.to_string_lossy().as_ref();
+    let path_matches = app.local_repo_input.as_str() == repository.root.to_string_lossy().as_ref();
 
     ui.separator();
     ui.label(format!(
@@ -180,33 +177,33 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                                     // Sólo se muestran acciones que corresponden al
                                     // código de estado observado por Git. El motor
                                     // volverá a comprobar su validez al confirmar.
-                                    let staged = file.code != "??"
-                                        && file.code.as_bytes()[0] != b' ';
-                                    let unstaged = file.code == "??"
-                                        || file.code.as_bytes()[1] != b' ';
+                                    let staged =
+                                        file.code != "??" && file.code.as_bytes()[0] != b' ';
+                                    let unstaged =
+                                        file.code == "??" || file.code.as_bytes()[1] != b' ';
                                     ui.horizontal(|ui| {
-                                        if unstaged && ui
-                                            .add_enabled(
-                                                path_matches && !app.local_action_loading,
-                                                egui::Button::new(
-                                                    app.i18n.t(lang, "e2_stage"),
-                                                ),
-                                            )
-                                            .clicked()
+                                        if unstaged
+                                            && ui
+                                                .add_enabled(
+                                                    path_matches && !app.local_action_loading,
+                                                    egui::Button::new(app.i18n.t(lang, "e2_stage")),
+                                                )
+                                                .clicked()
                                         {
                                             app.preview_local_action(
                                                 ctx.clone(),
                                                 LocalAction::Stage(file.path.clone()),
                                             );
                                         }
-                                        if staged && ui
-                                            .add_enabled(
-                                                path_matches && !app.local_action_loading,
-                                                egui::Button::new(
-                                                    app.i18n.t(lang, "e2_unstage"),
-                                                ),
-                                            )
-                                            .clicked()
+                                        if staged
+                                            && ui
+                                                .add_enabled(
+                                                    path_matches && !app.local_action_loading,
+                                                    egui::Button::new(
+                                                        app.i18n.t(lang, "e2_unstage"),
+                                                    ),
+                                                )
+                                                .clicked()
                                         {
                                             app.preview_local_action(
                                                 ctx.clone(),

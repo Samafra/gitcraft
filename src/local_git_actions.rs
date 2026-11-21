@@ -54,14 +54,13 @@ fn safety_stamp(root: &Path) -> Result<Vec<u8>, String> {
         stamp.extend_from_slice(&bytes);
     }
     // Un repositorio recién inicializado carece de HEAD confirmada.
-    let head = run_git(Some(root), &["rev-parse", "--verify", "HEAD"])
-        .unwrap_or_default();
+    let head = run_git(Some(root), &["rev-parse", "--verify", "HEAD"]).unwrap_or_default();
     stamp.extend_from_slice(&(head.len() as u64).to_be_bytes());
     stamp.extend_from_slice(&head);
     // Dos ramas distintas pueden apuntar al mismo SHA. Guardar también el
     // nombre simbólico de HEAD impide confirmar un commit en otra rama.
-    let branch = run_git(Some(root), &["symbolic-ref", "-q", "--short", "HEAD"])
-        .unwrap_or_default();
+    let branch =
+        run_git(Some(root), &["symbolic-ref", "-q", "--short", "HEAD"]).unwrap_or_default();
     stamp.extend_from_slice(&(branch.len() as u64).to_be_bytes());
     stamp.extend_from_slice(&branch);
     Ok(stamp)
@@ -75,7 +74,9 @@ fn validate_file_path(path: &str) -> Result<(), String> {
         || path.ends_with('/')
         || path.contains('\0')
         || candidate.is_absolute()
-        || candidate.components().any(|part| !matches!(part, Component::Normal(_)))
+        || candidate
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
     {
         return Err("La ruta del archivo no es válida para una operación E2.".into());
     }
@@ -104,8 +105,7 @@ fn current_file_hash(root: &Path, path: &str) -> Result<Option<Vec<u8>>, String>
             if !real_file.starts_with(root) {
                 return Err("El archivo está fuera de la raíz Git.".into());
             }
-            run_git(Some(root), &["hash-object", "--no-filters", "--", path])
-                .map(Some)
+            run_git(Some(root), &["hash-object", "--no-filters", "--", path]).map(Some)
         }
         // Para una eliminación de archivo, Git conserva la entrada original
         // en el índice, pero no hay bytes que comprobar en el directorio.
@@ -206,7 +206,10 @@ pub fn preview_action(root: &Path, action: LocalAction) -> Result<LocalActionPre
                     preview.chars().take(12_000).collect()
                 }
             };
-            (format!("{} únicamente: {} ({})", mode, file, entry.code), detail)
+            (
+                format!("{} únicamente: {} ({})", mode, file, entry.code),
+                detail,
+            )
         }
         LocalAction::Commit(message) => {
             let message = message.trim();
@@ -235,14 +238,20 @@ pub fn preview_action(root: &Path, action: LocalAction) -> Result<LocalActionPre
             if staged.is_empty() {
                 return Err("No hay archivos preparados para crear un commit.".into());
             }
-            let names = staged.split(|ch| *ch == 0).filter(|part| !part.is_empty()).count();
+            let names = staged
+                .split(|ch| *ch == 0)
+                .filter(|part| !part.is_empty())
+                .count();
             let stats = run_git(Some(&path), &["diff", "--cached", "--stat", "--"])?;
             (
                 format!(
                     "Crear commit LOCAL en rama '{}': {} archivos preparados. Mensaje: {}",
                     repository.head, names, message
                 ),
-                String::from_utf8_lossy(&stats).chars().take(12_000).collect(),
+                String::from_utf8_lossy(&stats)
+                    .chars()
+                    .take(12_000)
+                    .collect(),
             )
         }
     };
@@ -271,8 +280,7 @@ pub fn execute_confirmed_action(preview: &LocalActionPreview) -> Result<LocalRep
     }
     if safety_stamp(&root)? != preview.stamp {
         return Err(
-            "El estado Git ha cambiado después de la vista previa; vuelve a revisarlo."
-                .into(),
+            "El estado Git ha cambiado después de la vista previa; vuelve a revisarlo.".into(),
         );
     }
 
@@ -393,23 +401,23 @@ mod tests {
         let fixture = Fixture::new();
         std::fs::write(fixture.root.join("original.txt"), "cambio E2\n").unwrap();
         let before = std::fs::read(fixture.root.join("original.txt")).unwrap();
-        let preview = preview_action(
-            &fixture.root,
-            LocalAction::Stage("original.txt".into()),
-        )
-        .unwrap();
+        let preview =
+            preview_action(&fixture.root, LocalAction::Stage("original.txt".into())).unwrap();
         let staged = execute_confirmed_action(&preview).unwrap();
         assert!(staged.status.iter().any(|item| item.code == "M "));
-        assert_eq!(std::fs::read(fixture.root.join("original.txt")).unwrap(), before);
+        assert_eq!(
+            std::fs::read(fixture.root.join("original.txt")).unwrap(),
+            before
+        );
 
-        let preview = preview_action(
-            &fixture.root,
-            LocalAction::Unstage("original.txt".into()),
-        )
-        .unwrap();
+        let preview =
+            preview_action(&fixture.root, LocalAction::Unstage("original.txt".into())).unwrap();
         let unstaged = execute_confirmed_action(&preview).unwrap();
         assert!(unstaged.status.iter().any(|item| item.code == " M"));
-        assert_eq!(std::fs::read(fixture.root.join("original.txt")).unwrap(), before);
+        assert_eq!(
+            std::fs::read(fixture.root.join("original.txt")).unwrap(),
+            before
+        );
     }
 
     /// El nombre con espacios tampoco se interpreta como varios argumentos.
@@ -420,7 +428,10 @@ mod tests {
         std::fs::write(fixture.root.join(name), "texto\n").unwrap();
         let preview = preview_action(&fixture.root, LocalAction::Stage(name.into())).unwrap();
         let snapshot = execute_confirmed_action(&preview).unwrap();
-        assert!(snapshot.status.iter().any(|item| item.path == name && item.code == "A "));
+        assert!(snapshot
+            .status
+            .iter()
+            .any(|item| item.path == name && item.code == "A "));
     }
 
     /// Un archivo modificado después del preview aborta sin modificar el índice.
@@ -428,11 +439,8 @@ mod tests {
     fn changed_file_rejects_confirmation() {
         let fixture = Fixture::new();
         std::fs::write(fixture.root.join("original.txt"), "antes\n").unwrap();
-        let preview = preview_action(
-            &fixture.root,
-            LocalAction::Stage("original.txt".into()),
-        )
-        .unwrap();
+        let preview =
+            preview_action(&fixture.root, LocalAction::Stage("original.txt".into())).unwrap();
         std::fs::write(fixture.root.join("original.txt"), "después\n").unwrap();
         assert!(execute_confirmed_action(&preview).is_err());
         let index = fixture.git(&["diff", "--cached", "--name-only"]);
@@ -445,8 +453,8 @@ mod tests {
         let fixture = Fixture::new();
         std::fs::write(fixture.root.join("original.txt"), "preparado\n").unwrap();
         fixture.git(&["add", "--", "original.txt"]);
-        let preview = preview_action(&fixture.root, LocalAction::Commit("Prueba E2".into()))
-            .unwrap();
+        let preview =
+            preview_action(&fixture.root, LocalAction::Commit("Prueba E2".into())).unwrap();
         std::fs::write(fixture.root.join("nuevo.txt"), "otro cambio\n").unwrap();
         fixture.git(&["add", "--", "nuevo.txt"]);
         assert!(execute_confirmed_action(&preview).is_err());
@@ -487,8 +495,8 @@ mod tests {
         fixture.git(&["config", "user.name", "GitCraft E2 Test"]);
         fixture.git(&["config", "user.email", "gitcraft-e2@example.invalid"]);
 
-        let preview = preview_action(&fixture.root, LocalAction::Commit("Commit E2".into()))
-            .unwrap();
+        let preview =
+            preview_action(&fixture.root, LocalAction::Commit("Commit E2".into())).unwrap();
         let result = execute_confirmed_action(&preview).unwrap();
         assert_ne!(fixture.git(&["rev-parse", "HEAD"]), old_head);
         assert_eq!(result.head, "prueba-e2");
@@ -503,11 +511,7 @@ mod tests {
     #[test]
     fn bad_inputs_never_write() {
         let fixture = Fixture::new();
-        assert!(preview_action(
-            &fixture.root,
-            LocalAction::Stage("../fuera".into())
-        )
-        .is_err());
+        assert!(preview_action(&fixture.root, LocalAction::Stage("../fuera".into())).is_err());
         assert!(preview_action(&fixture.root, LocalAction::Commit("".into())).is_err());
         assert!(preview_action(&fixture.root, LocalAction::Commit("Sin cambios".into())).is_err());
         assert!(fixture.git(&["status", "--porcelain"]).is_empty());
