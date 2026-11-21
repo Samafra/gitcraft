@@ -393,8 +393,9 @@ mod tests {
     }
 
     impl TemporaryRepository {
-        /// Crea una carpeta nueva y una rama main, con un commit inicial ficticio.
-        fn new() -> Self {
+        /// Crea una carpeta temporal Git sin commits: se prueba también la
+        /// posibilidad de abrir repositorios recién inicializados.
+        fn empty() -> Self {
             let id = NEXT_TEST.fetch_add(1, Ordering::Relaxed);
             let root = std::env::temp_dir().join(format!(
                 "gitcraft-e1-{}-{}-{}",
@@ -409,6 +410,13 @@ mod tests {
             let fixture = Self { root };
             fixture.git(&["init", "-q"]);
             fixture.git(&["symbolic-ref", "HEAD", "refs/heads/main"]);
+            fixture
+        }
+
+        /// Añade un commit al repositorio temporal, exclusivamente para
+        /// que los tests puedan comprobar el historial y las diferencias.
+        fn new() -> Self {
+            let fixture = Self::empty();
             std::fs::write(fixture.root.join("archivo.txt"), "primera línea\n")
                 .expect("archivo de prueba");
             fixture.git(&["add", "archivo.txt"]);
@@ -458,6 +466,8 @@ mod tests {
         let fixture = TemporaryRepository::new();
         let before_head = fixture.git(&["rev-parse", "HEAD"]);
         let before_status = fixture.git(&["status", "--porcelain=v1", "-z"]);
+        let before_index = std::fs::read(fixture.root.join(".git/index"))
+            .expect("índice Git de la prueba");
         let snapshot = inspect_repository(fixture.root.to_str().expect("ruta UTF-8"))
             .expect("inspección Git correcta");
 
@@ -467,6 +477,10 @@ mod tests {
         assert!(snapshot.git_version.starts_with("git version"));
         assert_eq!(fixture.git(&["rev-parse", "HEAD"]), before_head);
         assert_eq!(fixture.git(&["status", "--porcelain=v1", "-z"]), before_status);
+        assert_eq!(
+            std::fs::read(fixture.root.join(".git/index")).unwrap(),
+            before_index
+        );
     }
 
     /// Se muestran a la vez cambios preparados, cambios sin preparar y no seguidos.
@@ -485,6 +499,27 @@ mod tests {
         assert!(snapshot.status.iter().any(|item| {
             item.code == "??" && item.path == "nombre con espacios ñ.txt"
         }));
+    }
+
+    /// Una carpeta situada dentro del repositorio se resuelve a la misma raíz.
+    #[test]
+    fn subdirectory_resolves_to_worktree_root() {
+        let fixture = TemporaryRepository::new();
+        let nested = fixture.root.join("carpeta con espacios");
+        std::fs::create_dir(&nested).unwrap();
+        let snapshot = inspect_repository(nested.to_str().unwrap()).unwrap();
+        assert_eq!(snapshot.root, fixture.root.canonicalize().unwrap());
+    }
+
+    /// Un repositorio Git sin commits también puede abrirse, sin forzar
+    /// la creación de una rama ni de un commit desde la aplicación.
+    #[test]
+    fn empty_repository_is_supported() {
+        let fixture = TemporaryRepository::empty();
+        let snapshot = inspect_repository(fixture.root.to_str().unwrap()).unwrap();
+        assert!(snapshot.commits.is_empty());
+        assert!(snapshot.status.is_empty());
+        assert_eq!(snapshot.head, "main");
     }
 
     /// El protocolo -z conserva los nombres original y nuevo de un renombrado.
@@ -553,15 +588,16 @@ mod tests {
     /// Una carpeta que no es Git debe devolver error y no inicializarse.
     #[test]
     fn ordinary_directory_is_rejected_without_changes() {
-        let fixture = TemporaryRepository::new();
-        let ordinary = fixture.root.join("no-es-git");
-        std::fs::create_dir(&ordinary).unwrap();
-        // Esta carpeta está dentro de un repo: para comprobar el error real,
-        // usamos una carpeta temporal distinta que no tiene padres Git.
+        // Usamos una carpeta distinta del fixture porque una subcarpeta Git
+        // también debe ser reconocida correctamente por inspect_repository.
         let isolated = std::env::temp_dir().join(format!(
-            "gitcraft-no-repo-{}-{}",
+            "gitcraft-no-repo-{}-{}-{}",
             std::process::id(),
-            NEXT_TEST.fetch_add(1, Ordering::Relaxed)
+            NEXT_TEST.fetch_add(1, Ordering::Relaxed),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("reloj disponible")
+                .as_nanos()
         ));
         std::fs::create_dir(&isolated).unwrap();
         let result = inspect_repository(isolated.to_str().unwrap());
