@@ -113,6 +113,11 @@ fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
         command.arg("-C").arg(directory);
     }
 
+    // Cada subcomando y su argumento se añaden de manera literal, sin shell.
+    // Este paso es imprescindible: si se omite, se invoca Git sin ejecutar
+    // status, log, diff o cualquier otra consulta requerida por E1.
+    command.args(args);
+
     // La política de entorno está separada para que pueda verificarse.
     configure_git_environment(&mut command);
     let output = command
@@ -323,7 +328,10 @@ fn parse_branches(bytes: &[u8]) -> Vec<LocalBranch> {
 /// los separadores elegidos por el usuario en su configuración personal.
 fn parse_commits(bytes: &[u8]) -> Result<Vec<LocalCommit>, String> {
     let mut commits = Vec::new();
-    for line in bytes.split(|byte| *byte == b'\n').filter(|line| !line.is_empty()) {
+    for line in bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
         let fields: Vec<&[u8]> = line.split(|byte| *byte == 0).collect();
         if fields.len() < 5 {
             return Err("La salida del historial Git es incompleta.".into());
@@ -353,7 +361,14 @@ pub fn read_diff(root: &Path, target: &LocalDiffTarget) -> Result<String, String
         )?,
         LocalDiffTarget::Staged => run_git(
             Some(root),
-            &["diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color", "--"],
+            &[
+                "diff",
+                "--cached",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-color",
+                "--",
+            ],
         )?,
         LocalDiffTarget::Commit(sha) => {
             if !(sha.len() == 40 || sha.len() == 64)
@@ -472,14 +487,25 @@ mod tests {
         }
     }
 
+    /// Garantiza que run_git realmente envía los argumentos a Git.
+    /// Previene la regresión que impedía ejecutar status, log y diff en E1.
+    #[test]
+    fn git_command_forwards_its_arguments() {
+        let version = run_git(None, &["--version"]).expect("Git debe recibir --version");
+        assert!(
+            String::from_utf8_lossy(&version).starts_with("git version"),
+            "Git debe ejecutar el argumento recibido, no mostrar su ayuda"
+        );
+    }
+
     /// Leer el repositorio no debe cambiar HEAD, archivos ni el índice Git.
     #[test]
     fn inspect_does_not_modify_repository() {
         let fixture = TemporaryRepository::new();
         let before_head = fixture.git(&["rev-parse", "HEAD"]);
         let before_status = fixture.git(&["status", "--porcelain=v1", "-z"]);
-        let before_index = std::fs::read(fixture.root.join(".git/index"))
-            .expect("índice Git de la prueba");
+        let before_index =
+            std::fs::read(fixture.root.join(".git/index")).expect("índice Git de la prueba");
         let snapshot = inspect_repository(fixture.root.to_str().expect("ruta UTF-8"))
             .expect("inspección Git correcta");
 
@@ -488,7 +514,10 @@ mod tests {
         assert_eq!(snapshot.commits.len(), 1);
         assert!(snapshot.git_version.starts_with("git version"));
         assert_eq!(fixture.git(&["rev-parse", "HEAD"]), before_head);
-        assert_eq!(fixture.git(&["status", "--porcelain=v1", "-z"]), before_status);
+        assert_eq!(
+            fixture.git(&["status", "--porcelain=v1", "-z"]),
+            before_status
+        );
         assert_eq!(
             std::fs::read(fixture.root.join(".git/index")).unwrap(),
             before_index
@@ -505,12 +534,14 @@ mod tests {
         std::fs::write(fixture.root.join("nombre con espacios ñ.txt"), "nuevo\n").unwrap();
 
         let snapshot = inspect_repository(fixture.root.to_str().unwrap()).unwrap();
-        assert!(snapshot.status.iter().any(|item| {
-            item.code == "MM" && item.path == "archivo.txt"
-        }));
-        assert!(snapshot.status.iter().any(|item| {
-            item.code == "??" && item.path == "nombre con espacios ñ.txt"
-        }));
+        assert!(snapshot
+            .status
+            .iter()
+            .any(|item| { item.code == "MM" && item.path == "archivo.txt" }));
+        assert!(snapshot
+            .status
+            .iter()
+            .any(|item| { item.code == "??" && item.path == "nombre con espacios ñ.txt" }));
     }
 
     /// Una carpeta situada dentro del repositorio se resuelve a la misma raíz.
@@ -541,7 +572,10 @@ mod tests {
         let entries = parse_status(bytes).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].path, "nombre nuevo.txt");
-        assert_eq!(entries[0].original_path.as_deref(), Some("nombre antiguo.txt"));
+        assert_eq!(
+            entries[0].original_path.as_deref(),
+            Some("nombre antiguo.txt")
+        );
     }
 
     /// Las ramas creadas en un repositorio temporal son sólo datos de lectura.
@@ -550,9 +584,10 @@ mod tests {
         let fixture = TemporaryRepository::new();
         fixture.git(&["branch", "experimento"]);
         let snapshot = inspect_repository(fixture.root.to_str().unwrap()).unwrap();
-        assert!(snapshot.branches.iter().any(|branch| {
-            branch.name == "experimento" && !branch.remote
-        }));
+        assert!(snapshot
+            .branches
+            .iter()
+            .any(|branch| { branch.name == "experimento" && !branch.remote }));
         assert_eq!(snapshot.commits[0].subject, "Primer commit");
         assert_eq!(snapshot.commits[0].sha.len(), 40);
     }
@@ -597,7 +632,10 @@ mod tests {
         // normalizadas evita confundir un enlace simbólico con otro repositorio.
         let reported = String::from_utf8_lossy(&output.stdout);
         let root = PathBuf::from(reported.trim());
-        assert_eq!(root.canonicalize().unwrap(), fixture.root.canonicalize().unwrap());
+        assert_eq!(
+            root.canonicalize().unwrap(),
+            fixture.root.canonicalize().unwrap()
+        );
     }
 
     /// Una carpeta que no es Git debe devolver error y no inicializarse.
