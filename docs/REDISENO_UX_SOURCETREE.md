@@ -4,7 +4,7 @@
 **Rama:** develop exclusivamente  
 **Punto de recuperación:** 4ccdf018d0f8ffefb679901d73866db973830a01 (E3-B validada en macOS Intel)  
 **main estable:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4  
-**Estado:** IMPLEMENTADO EN DEVELOP. **Rustfmt sin diferencias confirmado por el usuario sobre `6bb7ce99`**. Compilación nativa y WebAssembly, seis tests de interfaz, 50 pruebas de regresión y Clippy completados correctamente sobre `7b0326b8` (con advertencias no bloqueantes en Clippy y WASM). Entre ambos commits solo cambió la indentación final de `src/ui_local_history.rs`. **Pruebas visuales pendientes**.
+**Estado:** VALIDACIÓN VISUAL PARCIAL — 8 de 10 comprobaciones correctas comunicadas por el usuario. **NO CERRADO**. Pendientes: contraste del tema claro y simplificación del Historial como lista de commits con detalles separados. Rustfmt, compilaciones, tests y Clippy previamente verificados según resultados comunicados.
 
 ## Motivo
 
@@ -164,6 +164,34 @@ git log -1 --oneline
 10. Abrir otro repositorio y comprobar que no se muestran datos viejos
     ni previews obsoletas. Comprobar que el repositorio GitCraft
     original sigue intacto.
+
+## Resultado de la primera ronda visual — 21/11/2026
+
+El usuario confirma ocho comprobaciones satisfactorias sobre la interfaz:
+barra y menú lateral, panel lateral redimensionable, separación
+preparados/sin preparar, diff a la derecha, confirmaciones E2,
+ubicación de Ramas/Etiquetas E3-B, accesos a remotos/stash/GitHub/MCP,
+y aislamiento de datos al cambiar de repositorio.
+
+**Pendientes expresos (2 de 10):**
+
+- **Tema claro:** el texto y la gama de colores siguen siendo difíciles de
+  leer. Hay que comprobar contraste de texto normal, secundario,
+  encabezados, botones, filas seleccionadas y diferencias.
+- **Historial:** la vista con grafo ASCII y varios bloques desplegables
+  sigue siendo compleja. Se prefiere una **lista de commits tipo SourceTree**
+  con las columnas esenciales y selección de una fila; el detalle y las
+  diferencias deben aparecer separados debajo. Mantener comparación, blame
+  y consultas anteriores disponibles sin ocupar la vista principal.
+
+**Criterio de aceptación adicional:** no cerrar el rediseño sólo por tener
+compilación correcta. Ambas áreas deben resultar fáciles de leer y usar
+en el Mac Intel del usuario. No iniciar E3-C hasta recibir conformidad.
+
+**Regla de publicación:** AGENTS.md prohíbe subir código Rust nuevo a
+develop cuando el entorno no puede ejecutar Rustfmt y Cargo antes del
+commit. Cualquier parche correctivo se prepara y verifica antes de
+publicarlo; nunca se delega al usuario corregir formato tras el push.
 
 ## Criterios de cierre
 
