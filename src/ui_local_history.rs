@@ -1,14 +1,15 @@
-//! Interfaz E3-A: grafo de historial y herramientas Git avanzadas de lectura.
+//! Interfaz E3-A/E3-B: historial de lectura y creación controlada de referencias.
 //!
-//! La vista se dibuja dentro de la pestaña «Git local» de E1/E2, sin crear
-//! operaciones de escritura. Todo dato pesado se consulta fuera del hilo
-//! gráfico y la respuesta se identifica con un contador de generación.
+//! E3-A conserva las consultas de grafo, comparación, blame, reflog y stash.
+//! E3-B añade la vista previa y confirmación de nuevas ramas o etiquetas
+//! locales, sin cambiar la rama activa ni modificar los archivos.
 //!
-//! Los nombres seleccionados proceden exclusivamente de Git y no se
-//! interpretan como comandos, expresiones de revisión ni rutas arbitrarias.
+//! Las tareas se ejecutan fuera de egui y las respuestas llevan números de
+//! generación para evitar resultados antiguos de otro repositorio.
 
 use crate::app::GitCraftApp;
 use crate::local_git_history::{GitHistoryOverview, HistoryRevision};
+use crate::local_git_refs::{RefKind, RefPreview};
 use eframe::egui;
 
 /// Petición de detalle que puede ejecutar E3-A sin modificar el repositorio.
@@ -49,6 +50,20 @@ pub struct HistoryUiState {
     pub overview_generation: u64,
     /// Identificador de consulta concreta, para ignorar respuestas antiguas.
     pub detail_generation: u64,
+    /// E3-B: clase de referencia seleccionada (rama o etiqueta).
+    pub ref_kind: RefKind,
+    /// E3-B: nombre de la nueva referencia; todavía no se ha creado.
+    pub ref_name: String,
+    /// E3-B: SHA de destino seleccionado entre los commits de E3-A.
+    pub ref_target: String,
+    /// E3-B: vista previa exacta de una posible escritura.
+    pub ref_preview: Option<RefPreview>,
+    /// E3-B: lectura o confirmación en curso, realizada fuera de egui.
+    pub ref_loading: bool,
+    /// E3-B: error de la última operación, independiente de E3-A.
+    pub ref_error: Option<String>,
+    /// E3-B: descarta respuestas de otro repositorio o petición.
+    pub ref_generation: u64,
 }
 
 impl HistoryUiState {
@@ -69,6 +84,14 @@ impl HistoryUiState {
         self.detail_loading = false;
         self.detail_label.clear();
         self.detail.clear();
+        // Una autorización antigua no puede sobrevivir al cambio de carpeta.
+        self.ref_generation = self.ref_generation.wrapping_add(1);
+        self.ref_kind = RefKind::Branch;
+        self.ref_name.clear();
+        self.ref_target.clear();
+        self.ref_preview = None;
+        self.ref_loading = false;
+        self.ref_error = None;
     }
 
     /// Preselecciona dos hashes y el primer archivo sin ejecutar ninguna acción.
@@ -87,6 +110,16 @@ impl HistoryUiState {
             .map(|revision| revision.sha.clone())
             .unwrap_or_default();
         self.selected_file = overview.tracked_files.first().cloned().unwrap_or_default();
+        // E3-B arranca apuntando al commit más reciente, sin crear nada.
+        self.ref_target = overview
+            .revisions
+            .first()
+            .map(|revision| revision.sha.clone())
+            .unwrap_or_default();
+        self.ref_preview = None;
+        self.ref_loading = false;
+        self.ref_error = None;
+        self.ref_generation = self.ref_generation.wrapping_add(1);
         self.overview = Some(overview);
         self.loading = false;
         self.error = None;
