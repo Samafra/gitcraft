@@ -1,3 +1,6 @@
+//! Vistas de gestión de GitHub: PR, Issues, Actions y Releases.
+//! Estas pantallas consultan o modifican datos remotos; las peticiones se hacen en segundo plano.
+
 use crate::app::GitCraftApp;
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
