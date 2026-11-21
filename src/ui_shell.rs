@@ -136,7 +136,9 @@ pub fn render_app_shell(app: &mut GitCraftApp, ctx: &egui::Context) {
 
         // No se requiere PAT para Git local. Las páginas de GitHub sí deben
         // solicitar autorización antes de mostrar operaciones remotas.
-        if app.user.is_none() {
+        // MCP puede funcionar con servidores locales sin una sesión GitHub.
+        // Las demás funciones remotas mantienen su control de autenticación.
+        if app.user.is_none() && app.active_tab != ActiveTab::Mcp {
             render_github_connection(app, ui, ctx);
             return;
         }
