@@ -4,7 +4,7 @@
 **Rama:** develop únicamente.  
 **Punto de recuperación previo:** 40b7eb55812756acc60f3af76be17839e6ed8252 (cierre E2 macOS Intel).  
 **main estable:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4.  
-**Estado:** IMPLEMENTADO y VALIDACIÓN AUTOMÁTICA E3-A SUPERADA en macOS Intel según resultado comunicado por el usuario. PRUEBAS VISUALES PENDIENTES.
+**Estado:** E3-A VALIDADA EN macOS INTEL para su alcance de solo lectura: batería automática correcta y ocho comprobaciones visuales correctas, sin incidencias, en repositorio temporal independiente. Otras plataformas y el resto de E3 continúan pendientes. `main` intacta.
 
 ## Alcance del roadmap
 
@@ -62,9 +62,10 @@ de revisiones con separadores NUL, diff, blame con ruta Unicode, reflog,
 etiquetas, stash y lectura sobre un repositorio sin commits. No se detectó
 un fallo en esos comandos.
 
-**Límite:** estas verificaciones no compilan el nuevo código Rust ni prueban
-la interfaz gráfica. No acreditan todavía E3-A en macOS Intel ni en
-otras plataformas. Rustfmt, Cargo y las pruebas visuales son obligatorios.
+**Límite de la revisión estática inicial:** estas comprobaciones por sí solas
+no compilaban Rust ni ejecutaban la interfaz. Las validaciones automáticas
+y visuales posteriores, descritas en las siguientes secciones, sí se
+completaron en el Mac Intel del usuario. No se extrapolan a otras plataformas.
 
 ## Pruebas automáticas en macOS Intel
 
@@ -108,8 +109,8 @@ han pasado los controles obligatorios. La compilación WebAssembly del script
 es condicional; no se deduce de la última línea si esa comprobación se ejecutó.
 
 Los tests crean repositorios temporales con commits, etiquetas y stash; sólo
-ellos escriben en sus carpetas privadas de prueba. **Faltan las comprobaciones
-visuales antes de declarar cerrada la etapa E3-A.**
+ellos escriben en sus carpetas privadas de prueba. Las comprobaciones visuales
+se realizaron posteriormente y quedan registradas en el cierre siguiente.
 
 ## Repositorio temporal para las pruebas visuales
 
@@ -149,16 +150,42 @@ la ruta mostrada; no sustituirla por la ruta de Samafra/gitcraft.
 7. Cambiar a otro repositorio; el panel debe descartar datos anteriores.
 8. Comprobar con git status -sb y git log -1 que el repositorio no cambió.
 
+## Evidencia de las pruebas visuales y cierre — 21/11/2026
+
+El usuario comunicó **OK en ocho pruebas visuales**, sin observaciones:
+
+1. El grafo muestra los dos commits preparados en la prueba E3.
+2. La comparación de commits muestra el cambio de la primera a la segunda línea.
+3. Blame muestra autor, fecha y texto de la línea confirmada.
+4. Reflog muestra movimientos de HEAD.
+5. Se muestra la etiqueta `etiqueta-e3`.
+6. Se muestra la entrada `Reserva temporal E3` del stash y no hay botones para aplicarla o eliminarla.
+7. Al cambiar de repositorio desaparecen los datos anteriores de E3-A.
+8. GitCraft funciona sin token y no modifica el repositorio.
+
+Se utilizó el procedimiento de comprobación visual sobre un **repositorio
+temporal independiente**. El usuario confirmó también la integridad del
+repositorio original de GitCraft. Los resultados fueron ejecutados en su
+Mac Intel y comunicados en la conversación; no se afirma haber ejecutado
+la GUI en el entorno remoto de revisión.
+
+**Decisión de cierre:** E3-A queda **VALIDADA EN macOS INTEL, exclusivamente
+para las funciones de lectura implementadas**. Se conservará el punto de
+recuperación anterior a E3-A `40b7eb55812756acc60f3af76be17839e6ed8252`.
+Las operaciones avanzadas de escritura de E3, la validación multiplataforma
+y la integración en `main` siguen fuera de este cierre.
+
 ## Matriz y criterio de cierre
 
 | Plataforma | Estado E3-A |
 | --- | --- |
-| macOS Intel | Validación automática correcta; pruebas visuales pendientes |
+| macOS Intel | **VALIDADA**: batería automática y ocho verificaciones visuales correctas |
 | macOS ARM | Pendiente |
 | Linux | Pendiente |
 | Windows | Pendiente |
 | WebAssembly | Motor local excluido, compilación pendiente |
 
-E3-A no se declarará validada hasta tener fmt, check, tests, Clippy y
-pruebas visuales correctas en macOS Intel. E3 completo seguirá pendiente.
-No fusionar en main sin autorización expresa y rollback comprobado.
+**Criterio de cierre E3-A satisfecho en macOS Intel:** Rustfmt, compilación,
+tests específicos, regresiones, Clippy y pruebas visuales correctas. La
+validación de otras plataformas y E3 completo siguen pendientes. No fusionar
+en `main` sin autorización expresa y punto de recuperación comprobado.
