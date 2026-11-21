@@ -68,9 +68,8 @@ pub fn render_repos_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Co
             app.trigger_github_sync(ctx.clone());
         }
         if ui.button(app.i18n.t(lang, "auth_disconnect_btn")).clicked() {
-            app.user = None;
-            app.repos.clear();
-            app.saved_token.clear();
+            // Borra credenciales en memoria e invalida los resultados pendientes.
+            app.disconnect_github();
         }
     });
 
