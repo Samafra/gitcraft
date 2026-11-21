@@ -240,17 +240,34 @@ pub fn execute_ref(preview: &RefPreview) -> Result<RefCreated, String> {
 
     // Nunca se incluye -f, --force, -D o checkout. Git protege también
     // el caso de que otro proceso cree el mismo nombre inmediatamente antes.
+    // Se deshabilitan hooks exclusivamente en este subproceso: una operación
+    // de referencia no debe ejecutar scripts externos del repositorio.
+    // Igual que E2, esto significa que NO se ejecutan validaciones de hooks.
     match preview.action.kind {
         RefKind::Branch => {
             run_git(
                 Some(&root),
-                &["branch", &preview.action.name, &preview.action.target],
+                &[
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "branch",
+                    &preview.action.name,
+                    &preview.action.target,
+                ],
             )?;
         }
         RefKind::Tag => {
             run_git(
                 Some(&root),
-                &["tag", &preview.action.name, &preview.action.target],
+                &[
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-c",
+                    "tag.gpgSign=false",
+                    "tag",
+                    &preview.action.name,
+                    &preview.action.target,
+                ],
             )?;
         }
     }
