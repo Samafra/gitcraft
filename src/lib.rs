@@ -28,5 +28,7 @@ pub mod ui_local_history;
 pub mod ui_manage;
 pub mod ui_mcp;
 pub mod ui_repos;
+// Nueva estructura visual con barra superior, navegación lateral y panel central.
+pub mod ui_shell;
 
 pub use app::GitCraftApp;
