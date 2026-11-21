@@ -573,7 +573,7 @@ fn render_references_page(
                         app.cancel_local_ref();
                         app.history.ref_kind = kind;
                     }
-                    render_ref_creation_panel(app, ui, ctx, &overview, can_query);
+                    render_ref_creation_panel(app, ui, ctx, &overview, can_query, kind);
                 } else {
                     ui.label(app.i18n.t(lang, "ux_load_refs_hint"));
                 }
