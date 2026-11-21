@@ -149,7 +149,12 @@ fn configure_git_environment(command: &mut Command) {
         .env_remove("GIT_INDEX_FILE")
         .env_remove("GIT_COMMON_DIR")
         .env_remove("GIT_OBJECT_DIRECTORY")
-        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES");
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        // El lector de Git local no necesita credenciales GitHub: no pasarlas
+        // a procesos externos, aunque GitCraft las haya heredado de Terminal.
+        .env_remove("GITHUB_TOKEN")
+        .env_remove("GITHUB_PERSONAL_ACCESS_TOKEN")
+        .env_remove("GH_TOKEN");
 }
 
 /// Interpreta el prefijo ~/ de macOS/Linux sin recurrir a un shell.
