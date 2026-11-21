@@ -393,6 +393,13 @@ impl GitCraftApp {
         let (tx, rx) = channel();
         app.tx = Some(tx);
         app.rx = Some(rx);
+        // La aplicación puede recuperar una pestaña remota de preferencias
+        // antiguas aunque el PAT ya no esté cargado. Empezar en la copia de
+        // trabajo evita una pantalla de login innecesaria en escritorio.
+        #[cfg(not(target_arch = "wasm32"))]
+        if app.user.is_none() {
+            app.active_tab = ActiveTab::LocalGit;
+        }
         app.apply_theme(&cc.egui_ctx);
         if !app.saved_token.trim().is_empty() {
             app.trigger_github_sync(cc.egui_ctx.clone());
