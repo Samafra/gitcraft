@@ -24,12 +24,9 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         return;
     };
     let lang = app.language;
-    let path_matches =
-        app.local_repo_input.as_str() == repository.root.to_string_lossy().as_ref();
-    let can_write = path_matches
-        && !app.local_loading
-        && !app.local_action_loading
-        && !app.history.ref_loading;
+    let path_matches = app.local_repo_input.as_str() == repository.root.to_string_lossy().as_ref();
+    let can_write =
+        path_matches && !app.local_loading && !app.local_action_loading && !app.history.ref_loading;
 
     ui.horizontal_wrapped(|ui| {
         ui.heading(app.i18n.t(lang, "ux_file_status"));
@@ -177,10 +174,7 @@ fn render_file_row(
 
         let key = if staged { "e2_unstage" } else { "e2_stage" };
         if ui
-            .add_enabled(
-                can_write,
-                egui::Button::new(app.i18n.t(lang, key)),
-            )
+            .add_enabled(can_write, egui::Button::new(app.i18n.t(lang, key)))
             .clicked()
         {
             let action = if staged {
@@ -227,15 +221,9 @@ fn render_diff_column(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Cont
     }
     if let Some(target) = &app.local_diff_target {
         let label = match target {
-            LocalDiffTarget::WorkingTree => {
-                app.i18n.t(lang, "local_diff_unstaged").to_string()
-            }
+            LocalDiffTarget::WorkingTree => app.i18n.t(lang, "local_diff_unstaged").to_string(),
             LocalDiffTarget::Staged => app.i18n.t(lang, "local_diff_staged").to_string(),
-            LocalDiffTarget::Commit(sha) => format!(
-                "{} {}",
-                app.i18n.t(lang, "local_commit"),
-                sha
-            ),
+            LocalDiffTarget::Commit(sha) => format!("{} {}", app.i18n.t(lang, "local_commit"), sha),
             LocalDiffTarget::File { path, staged } => format!(
                 "{} ({})",
                 path,
@@ -250,9 +238,7 @@ fn render_diff_column(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Cont
     } else {
         ui.label(app.i18n.t(lang, "ux_select_file_hint"));
     }
-    if app.local_diff_target.is_some()
-        && app.local_diff_text.is_empty()
-        && !app.local_diff_loading
+    if app.local_diff_target.is_some() && app.local_diff_text.is_empty() && !app.local_diff_loading
     {
         ui.label(app.i18n.t(lang, "local_empty_diff"));
     }

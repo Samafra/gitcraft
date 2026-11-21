@@ -152,216 +152,220 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
     egui::CollapsingHeader::new(title)
         .default_open(true)
         .show(ui, |ui| {
-        ui.label(
-            egui::RichText::new(app.i18n.t(lang, "e3_readonly_note"))
-                .weak()
-                .small(),
-        );
+            ui.label(
+                egui::RichText::new(app.i18n.t(lang, "e3_readonly_note"))
+                    .weak()
+                    .small(),
+            );
 
-        let matches_root = app
-            .local_repository
-            .as_ref()
-            .map(|repo| app.local_repo_input.as_str() == repo.root.to_string_lossy().as_ref())
-            .unwrap_or(false);
-        let can_query = matches_root && !app.local_loading && !app.local_action_loading;
+            let matches_root = app
+                .local_repository
+                .as_ref()
+                .map(|repo| app.local_repo_input.as_str() == repo.root.to_string_lossy().as_ref())
+                .unwrap_or(false);
+            let can_query = matches_root && !app.local_loading && !app.local_action_loading;
 
-        if ui
-            .add_enabled(
-                can_query && !app.history.loading,
-                egui::Button::new(app.i18n.t(lang, "e3_load")),
-            )
-            .clicked()
-        {
-            app.load_advanced_history(ctx.clone());
-        }
-        if app.history.loading {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label(app.i18n.t(lang, "e3_loading"));
-            });
-        }
-        if let Some(error) = &app.history.error {
-            ui.colored_label(egui::Color32::LIGHT_RED, error);
-        }
-
-        // Sólo se copia la fotografía del grafo; las consultas Git se realizan
-        // fuera de egui. Los botones pueden modificar app sin préstamos vivos.
-        let Some(overview) = app.history.overview.clone() else {
-            ui.label(app.i18n.t(lang, "e3_empty"));
-            return;
-        };
-        if !matches_root
-            || app.local_repository.as_ref().map(|repo| &repo.root) != Some(&overview.root)
-        {
-            ui.label(app.i18n.t(lang, "e3_reload_required"));
-            return;
-        }
-
-        ui.collapsing(app.i18n.t(lang, "e3_graph"), |ui| {
-            if overview.graph.is_empty() {
-                ui.label(app.i18n.t(lang, "e3_no_commits"));
-            } else {
-                let mut graph = overview.graph.clone();
-                egui::ScrollArea::vertical()
-                    .id_salt("e3_graph_scroll")
-                    .max_height(250.0)
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut graph)
-                                .code_editor()
-                                .interactive(false)
-                                .desired_width(f32::INFINITY)
-                                .desired_rows(10),
-                        );
-                    });
-            }
-        });
-
-        ui.group(|ui| {
-            ui.label(egui::RichText::new(app.i18n.t(lang, "e3_compare")).strong());
-            if overview.revisions.len() < 2 {
-                ui.label(app.i18n.t(lang, "e3_need_two_commits"));
-                return;
-            }
-
-            // Los dos extremos sólo se eligen entre commits obtenidos de Git.
-            ui.horizontal_wrapped(|ui| {
-                ui.label(app.i18n.t(lang, "e3_base"));
-                egui::ComboBox::from_id_salt("e3_compare_base")
-                    .selected_text(revision_label(&overview.revisions, &app.history.base_sha))
-                    .width(250.0)
-                    .show_ui(ui, |ui| {
-                        for revision in &overview.revisions {
-                            ui.selectable_value(
-                                &mut app.history.base_sha,
-                                revision.sha.clone(),
-                                revision_label(&overview.revisions, &revision.sha),
-                            );
-                        }
-                    });
-            });
-            ui.horizontal_wrapped(|ui| {
-                ui.label(app.i18n.t(lang, "e3_target"));
-                egui::ComboBox::from_id_salt("e3_compare_target")
-                    .selected_text(revision_label(&overview.revisions, &app.history.target_sha))
-                    .width(250.0)
-                    .show_ui(ui, |ui| {
-                        for revision in &overview.revisions {
-                            ui.selectable_value(
-                                &mut app.history.target_sha,
-                                revision.sha.clone(),
-                                revision_label(&overview.revisions, &revision.sha),
-                            );
-                        }
-                    });
-            });
             if ui
                 .add_enabled(
-                    can_query
-                        && !app.history.detail_loading
-                        && app.history.base_sha != app.history.target_sha,
-                    egui::Button::new(app.i18n.t(lang, "e3_compare_button")),
+                    can_query && !app.history.loading,
+                    egui::Button::new(app.i18n.t(lang, "e3_load")),
                 )
                 .clicked()
             {
-                app.load_advanced_detail(
-                    ctx.clone(),
-                    HistoryDetailRequest::Comparison {
-                        left: app.history.base_sha.clone(),
-                        right: app.history.target_sha.clone(),
-                    },
-                );
+                app.load_advanced_history(ctx.clone());
             }
-        });
+            if app.history.loading {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(app.i18n.t(lang, "e3_loading"));
+                });
+            }
+            if let Some(error) = &app.history.error {
+                ui.colored_label(egui::Color32::LIGHT_RED, error);
+            }
 
-        // E3-B se presenta ahora en las pantallas laterales Ramas y
-        // Etiquetas; el historial queda dedicado a lectura y comparación.
+            // Sólo se copia la fotografía del grafo; las consultas Git se realizan
+            // fuera de egui. Los botones pueden modificar app sin préstamos vivos.
+            let Some(overview) = app.history.overview.clone() else {
+                ui.label(app.i18n.t(lang, "e3_empty"));
+                return;
+            };
+            if !matches_root
+                || app.local_repository.as_ref().map(|repo| &repo.root) != Some(&overview.root)
+            {
+                ui.label(app.i18n.t(lang, "e3_reload_required"));
+                return;
+            }
 
-        ui.group(|ui| {
-            ui.label(egui::RichText::new(app.i18n.t(lang, "e3_blame")).strong());
-            if overview.tracked_files.is_empty() {
-                ui.label(app.i18n.t(lang, "e3_no_tracked_files"));
-            } else {
-                egui::ComboBox::from_id_salt("e3_blame_file")
-                    .selected_text(&app.history.selected_file)
-                    .width(320.0)
-                    .show_ui(ui, |ui| {
-                        for path in &overview.tracked_files {
-                            ui.selectable_value(&mut app.history.selected_file, path.clone(), path);
-                        }
-                    });
+            ui.collapsing(app.i18n.t(lang, "e3_graph"), |ui| {
+                if overview.graph.is_empty() {
+                    ui.label(app.i18n.t(lang, "e3_no_commits"));
+                } else {
+                    let mut graph = overview.graph.clone();
+                    egui::ScrollArea::vertical()
+                        .id_salt("e3_graph_scroll")
+                        .max_height(250.0)
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::TextEdit::multiline(&mut graph)
+                                    .code_editor()
+                                    .interactive(false)
+                                    .desired_width(f32::INFINITY)
+                                    .desired_rows(10),
+                            );
+                        });
+                }
+            });
+
+            ui.group(|ui| {
+                ui.label(egui::RichText::new(app.i18n.t(lang, "e3_compare")).strong());
+                if overview.revisions.len() < 2 {
+                    ui.label(app.i18n.t(lang, "e3_need_two_commits"));
+                    return;
+                }
+
+                // Los dos extremos sólo se eligen entre commits obtenidos de Git.
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(app.i18n.t(lang, "e3_base"));
+                    egui::ComboBox::from_id_salt("e3_compare_base")
+                        .selected_text(revision_label(&overview.revisions, &app.history.base_sha))
+                        .width(250.0)
+                        .show_ui(ui, |ui| {
+                            for revision in &overview.revisions {
+                                ui.selectable_value(
+                                    &mut app.history.base_sha,
+                                    revision.sha.clone(),
+                                    revision_label(&overview.revisions, &revision.sha),
+                                );
+                            }
+                        });
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(app.i18n.t(lang, "e3_target"));
+                    egui::ComboBox::from_id_salt("e3_compare_target")
+                        .selected_text(revision_label(&overview.revisions, &app.history.target_sha))
+                        .width(250.0)
+                        .show_ui(ui, |ui| {
+                            for revision in &overview.revisions {
+                                ui.selectable_value(
+                                    &mut app.history.target_sha,
+                                    revision.sha.clone(),
+                                    revision_label(&overview.revisions, &revision.sha),
+                                );
+                            }
+                        });
+                });
                 if ui
                     .add_enabled(
-                        can_query && !app.history.detail_loading,
-                        egui::Button::new(app.i18n.t(lang, "e3_blame_button")),
+                        can_query
+                            && !app.history.detail_loading
+                            && app.history.base_sha != app.history.target_sha,
+                        egui::Button::new(app.i18n.t(lang, "e3_compare_button")),
                     )
                     .clicked()
                 {
                     app.load_advanced_detail(
                         ctx.clone(),
-                        HistoryDetailRequest::Blame(app.history.selected_file.clone()),
+                        HistoryDetailRequest::Comparison {
+                            left: app.history.base_sha.clone(),
+                            right: app.history.target_sha.clone(),
+                        },
                     );
                 }
-                if overview.tracked_truncated {
-                    ui.label(app.i18n.t(lang, "e3_tracked_limit"));
-                }
-            }
-        });
-
-        // Estas listas son información de recuperación. No muestran
-        // controles para aplicar stash o reescribir referencias.
-        ui.collapsing(
-            format!(
-                "{} ({})",
-                app.i18n.t(lang, "e3_reflog"),
-                overview.reflog.len()
-            ),
-            |ui| {
-                draw_lines(ui, "e3_reflog_scroll", &overview.reflog);
-            },
-        );
-        ui.collapsing(
-            format!("{} ({})", app.i18n.t(lang, "e3_tags"), overview.tags.len()),
-            |ui| {
-                draw_lines(ui, "e3_tags_scroll", &overview.tags);
-            },
-        );
-        ui.collapsing(
-            format!(
-                "{} ({})",
-                app.i18n.t(lang, "e3_stash"),
-                overview.stash.len()
-            ),
-            |ui| {
-                draw_lines(ui, "e3_stash_scroll", &overview.stash);
-            },
-        );
-
-        if app.history.detail_loading {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label(app.i18n.t(lang, "e3_detail_loading"));
             });
-        }
-        if !app.history.detail_label.is_empty() {
-            ui.label(egui::RichText::new(&app.history.detail_label).strong());
-            if app.history.detail.is_empty() && !app.history.detail_loading {
-                ui.label(app.i18n.t(lang, "e3_no_diff"));
-            }
-            let mut result = app.history.detail.clone();
-            egui::ScrollArea::vertical()
-                .id_salt("e3_detail_scroll")
-                .max_height(350.0)
-                .show(ui, |ui| {
-                    ui.add(
-                        egui::TextEdit::multiline(&mut result)
-                            .code_editor()
-                            .interactive(false)
-                            .desired_width(f32::INFINITY)
-                            .desired_rows(12),
-                    );
+
+            // E3-B se presenta ahora en las pantallas laterales Ramas y
+            // Etiquetas; el historial queda dedicado a lectura y comparación.
+
+            ui.group(|ui| {
+                ui.label(egui::RichText::new(app.i18n.t(lang, "e3_blame")).strong());
+                if overview.tracked_files.is_empty() {
+                    ui.label(app.i18n.t(lang, "e3_no_tracked_files"));
+                } else {
+                    egui::ComboBox::from_id_salt("e3_blame_file")
+                        .selected_text(&app.history.selected_file)
+                        .width(320.0)
+                        .show_ui(ui, |ui| {
+                            for path in &overview.tracked_files {
+                                ui.selectable_value(
+                                    &mut app.history.selected_file,
+                                    path.clone(),
+                                    path,
+                                );
+                            }
+                        });
+                    if ui
+                        .add_enabled(
+                            can_query && !app.history.detail_loading,
+                            egui::Button::new(app.i18n.t(lang, "e3_blame_button")),
+                        )
+                        .clicked()
+                    {
+                        app.load_advanced_detail(
+                            ctx.clone(),
+                            HistoryDetailRequest::Blame(app.history.selected_file.clone()),
+                        );
+                    }
+                    if overview.tracked_truncated {
+                        ui.label(app.i18n.t(lang, "e3_tracked_limit"));
+                    }
+                }
+            });
+
+            // Estas listas son información de recuperación. No muestran
+            // controles para aplicar stash o reescribir referencias.
+            ui.collapsing(
+                format!(
+                    "{} ({})",
+                    app.i18n.t(lang, "e3_reflog"),
+                    overview.reflog.len()
+                ),
+                |ui| {
+                    draw_lines(ui, "e3_reflog_scroll", &overview.reflog);
+                },
+            );
+            ui.collapsing(
+                format!("{} ({})", app.i18n.t(lang, "e3_tags"), overview.tags.len()),
+                |ui| {
+                    draw_lines(ui, "e3_tags_scroll", &overview.tags);
+                },
+            );
+            ui.collapsing(
+                format!(
+                    "{} ({})",
+                    app.i18n.t(lang, "e3_stash"),
+                    overview.stash.len()
+                ),
+                |ui| {
+                    draw_lines(ui, "e3_stash_scroll", &overview.stash);
+                },
+            );
+
+            if app.history.detail_loading {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(app.i18n.t(lang, "e3_detail_loading"));
                 });
-        }
+            }
+            if !app.history.detail_label.is_empty() {
+                ui.label(egui::RichText::new(&app.history.detail_label).strong());
+                if app.history.detail.is_empty() && !app.history.detail_loading {
+                    ui.label(app.i18n.t(lang, "e3_no_diff"));
+                }
+                let mut result = app.history.detail.clone();
+                egui::ScrollArea::vertical()
+                    .id_salt("e3_detail_scroll")
+                    .max_height(350.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut result)
+                                .code_editor()
+                                .interactive(false)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(12),
+                        );
+                    });
+            }
     });
 }
 

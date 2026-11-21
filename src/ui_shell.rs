@@ -13,11 +13,11 @@ use crate::app::{ActiveTab, GitCraftApp};
 use crate::i18n::Language;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::local_git_refs::RefKind;
+use crate::ui_changes::render_changes_tab;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::ui_local_git::render_local_git_tab;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::ui_local_history::{render_history_panel, render_ref_creation_panel};
-use crate::ui_changes::render_changes_tab;
 use crate::ui_manage::{
     render_actions_tab, render_issues_tab, render_prs_tab, render_releases_tab,
 };
@@ -216,28 +216,19 @@ fn render_local_toolbar(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Co
         && !app.history.ref_loading;
     ui.horizontal_wrapped(|ui| {
         if ui
-            .add_enabled(
-                available,
-                egui::Button::new(app.i18n.t(lang, "ux_commit")),
-            )
+            .add_enabled(available, egui::Button::new(app.i18n.t(lang, "ux_commit")))
             .clicked()
         {
             select_workspace(app, WorkspacePane::FileStatus, ctx);
         }
         if ui
-            .add_enabled(
-                available,
-                egui::Button::new(app.i18n.t(lang, "ux_history")),
-            )
+            .add_enabled(available, egui::Button::new(app.i18n.t(lang, "ux_history")))
             .clicked()
         {
             select_workspace(app, WorkspacePane::History, ctx);
         }
         if ui
-            .add_enabled(
-                available,
-                egui::Button::new(app.i18n.t(lang, "ux_branch")),
-            )
+            .add_enabled(available, egui::Button::new(app.i18n.t(lang, "ux_branch")))
             .clicked()
         {
             select_workspace(app, WorkspacePane::Branches, ctx);
@@ -245,10 +236,7 @@ fn render_local_toolbar(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Co
             app.cancel_local_ref();
         }
         if ui
-            .add_enabled(
-                available,
-                egui::Button::new(app.i18n.t(lang, "ux_tag")),
-            )
+            .add_enabled(available, egui::Button::new(app.i18n.t(lang, "ux_tag")))
             .clicked()
         {
             select_workspace(app, WorkspacePane::Tags, ctx);
@@ -257,10 +245,7 @@ fn render_local_toolbar(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Co
         }
         ui.separator();
         if ui
-            .add_enabled(
-                available,
-                egui::Button::new(app.i18n.t(lang, "ux_refresh")),
-            )
+            .add_enabled(available, egui::Button::new(app.i18n.t(lang, "ux_refresh")))
             .clicked()
         {
             app.refresh_local_repository(ctx.clone());
@@ -268,7 +253,13 @@ fn render_local_toolbar(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Co
 
         // La similitud visual no justifica habilitar comandos que aún no
         // disponen de confirmación y pruebas. No tienen acción oculta.
-        for key in ["ux_fetch", "ux_pull", "ux_push", "ux_merge", "ux_stash_action"] {
+        for key in [
+            "ux_fetch",
+            "ux_pull",
+            "ux_push",
+            "ux_merge",
+            "ux_stash_action",
+        ] {
             ui.add_enabled(false, egui::Button::new(app.i18n.t(lang, key)))
                 .on_hover_text(app.i18n.t(lang, "ux_unavailable"));
         }
@@ -384,10 +375,7 @@ fn sidebar_local_item(
 /// Cambiar de página no transmite tokens ni inicia peticiones por sí mismo.
 fn sidebar_remote_item(app: &mut GitCraftApp, ui: &mut egui::Ui, tab: ActiveTab, key: &str) {
     let label = app.i18n.t(app.language, key).to_owned();
-    if ui
-        .selectable_label(app.active_tab == tab, label)
-        .clicked()
-    {
+    if ui.selectable_label(app.active_tab == tab, label).clicked() {
         app.active_tab = tab;
     }
 }
@@ -418,10 +406,7 @@ fn render_local_workspace(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::
             && !app.history.ref_loading
             && !app.local_repo_input.trim().is_empty();
         if ui
-            .add_enabled(
-                may_open,
-                egui::Button::new(app.i18n.t(lang, "local_open")),
-            )
+            .add_enabled(may_open, egui::Button::new(app.i18n.t(lang, "local_open")))
             .clicked()
         {
             app.workspace_pane = WorkspacePane::FileStatus;
@@ -503,9 +488,10 @@ fn render_references_page(
     ui.heading(app.i18n.t(lang, title_key));
     let repo = app.local_repository.as_ref().cloned();
     let overview = app.history.overview.clone();
-    let local_ok = repo.as_ref().map(|repo| {
-        app.local_repo_input.as_str() == repo.root.to_string_lossy().as_ref()
-    }).unwrap_or(false);
+    let local_ok = repo
+        .as_ref()
+        .map(|repo| app.local_repo_input.as_str() == repo.root.to_string_lossy().as_ref())
+        .unwrap_or(false);
     let can_query = local_ok && !app.local_loading && !app.local_action_loading;
     if ui
         .add_enabled(
