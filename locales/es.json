@@ -93,5 +93,18 @@
   "local_empty_diff": "No hay diferencias para esta selección.",
   "local_untracked_note": "Los archivos no seguidos aparecen en Estado, pero no en git diff.",
   "local_without_github_hint": "También puedes abrir Git local sin iniciar sesión en GitHub, desde su pestaña.",
-  "local_web_unavailable": "El acceso a Git instalado localmente sólo está disponible en escritorio, no en el navegador."
+  "local_web_unavailable": "El acceso a Git instalado localmente sólo está disponible en escritorio, no en el navegador.",
+  "e2_stage": "Preparar",
+  "e2_unstage": "Retirar del índice",
+  "e2_diff_file": "Diff del archivo",
+  "e2_diff_index": "Diff preparado",
+  "e2_commit_title": "Commit local",
+  "e2_commit_hint": "Mensaje del commit (solo repositorio de pruebas)...",
+  "e2_preview_commit": "Vista previa del commit",
+  "e2_commit_warning": "E2 modifica el índice o HEAD al confirmar. No hace push ni descarta archivos. Los commits se crean sin ejecutar hooks ni firma GPG; prueba primero en un repositorio temporal.",
+  "e2_action_loading": "Comprobando operación local...",
+  "e2_confirm_title": "Confirmar operación Git local",
+  "e2_confirm_notice": "Revisa los archivos y la rama. Se volverá a comprobar el estado antes de escribir. Si cambió, la operación será rechazada.",
+  "e2_confirm": "Confirmar operación",
+  "e2_cancel": "Cancelar sin cambios"
 }
