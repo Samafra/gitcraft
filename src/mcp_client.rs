@@ -156,23 +156,11 @@ async fn send_mcp_session(
                 let sys_path = std::env::var("PATH").unwrap_or_default();
                 let full_path = format!("/opt/homebrew/bin:/usr/local/bin:{}", sys_path);
 
-                // Eliminamos explícitamente posibles tokens heredados del proceso padre.
-                // Un servidor MCP no autorizado nunca recibe automáticamente credenciales GitHub.
+                // Separamos la política de credenciales en una función verificable.
+                // Así usamos exactamente las mismas reglas en el programa y en sus tests.
                 let mut command = Command::new(prog);
-                command
-                    .args(args)
-                    .env("PATH", full_path)
-                    .env_remove("GITHUB_PERSONAL_ACCESS_TOKEN")
-                    .env_remove("GITHUB_TOKEN")
-                    .env_remove("GH_TOKEN");
-
-                // Sólo cuando el usuario ha autorizado este servidor se añade el PAT.
-                // Nunca se escribe el token en el comando, argumentos ni mensajes de error.
-                if !github_token.trim().is_empty() {
-                    command
-                        .env("GITHUB_PERSONAL_ACCESS_TOKEN", github_token.trim())
-                        .env("GITHUB_TOKEN", github_token.trim());
-                }
+                command.args(args).env("PATH", full_path);
+                configure_mcp_github_environment(&mut command, github_token);
 
                 let mut child = command
                     .stdin(std::process::Stdio::piped())
@@ -246,5 +234,106 @@ async fn send_mcp_session(
                 Ok(responses)
             }
         }
+    }
+}
+
+
+/// Prepara las variables de entorno de un proceso MCP en sistemas de escritorio.
+///
+/// En Rust, un `Command` representa un programa que se ejecutará más adelante.
+/// `env_remove` impide que el proceso reciba una variable incluso si GitCraft
+/// la heredó de Terminal o de otra aplicación. Es importante realizarlo **antes**
+/// de iniciar el proceso, para no exponer por accidente un token GitHub.
+///
+/// Parámetros:
+/// - `command`: programa hijo que todavía no ha sido iniciado.
+/// - `github_token`: token expresamente autorizado por el usuario para este
+///   servidor concreto. Una cadena vacía significa «sin autorización».
+///
+/// Esta función no ejecuta programas, no escribe ficheros y no muestra secretos.
+#[cfg(not(target_arch = "wasm32"))]
+fn configure_mcp_github_environment(command: &mut tokio::process::Command, github_token: &str) {
+    // Primero revocamos cualquier credencial de GitHub que pudiera heredarse.
+    // También retiramos GH_TOKEN, que utilizan otras herramientas de GitHub.
+    command
+        .env_remove("GITHUB_PERSONAL_ACCESS_TOKEN")
+        .env_remove("GITHUB_TOKEN")
+        .env_remove("GH_TOKEN");
+
+    // Sólo el consentimiento explícito de la interfaz puede proporcionar un PAT.
+    // Las variables tienen el mismo nombre que utilizaba el cliente anteriormente.
+    if !github_token.trim().is_empty() {
+        command
+            .env("GITHUB_PERSONAL_ACCESS_TOKEN", github_token.trim())
+            .env("GITHUB_TOKEN", github_token.trim());
+    }
+}
+
+// Estas pruebas ejecutan únicamente el programa local «env», que muestra las
+// variables recibidas por el proceso hijo. No se invoca GitHub ni ningún servidor MCP.
+// La prueba existe para sistemas Unix (macOS/Linux); en Windows deberá cubrirse
+// posteriormente con un ejecutable de prueba equivalente.
+#[cfg(all(test, unix))]
+mod mcp_environment_tests {
+    use super::configure_mcp_github_environment;
+    use std::collections::BTreeMap;
+    use tokio::process::Command;
+
+    /// Arranca un proceso de prueba con valores ficticios en sus variables.
+    ///
+    /// Primero simulamos credenciales heredadas y después aplicamos la misma
+    /// política de seguridad que utiliza GitCraft. La salida se examina en
+    /// memoria: jamás se imprime una variable ni un token en el informe.
+    async fn probe_environment(token_autorizado: &str) -> BTreeMap<String, String> {
+        let mut command = Command::new("env");
+        command
+            .env("GITHUB_PERSONAL_ACCESS_TOKEN", "E0_DUMMY_HEREDADO_A")
+            .env("GITHUB_TOKEN", "E0_DUMMY_HEREDADO_B")
+            .env("GH_TOKEN", "E0_DUMMY_HEREDADO_C");
+
+        // Al aplicar la política, todas las credenciales ficticias se borran.
+        // Si existe permiso, sólo se agrega el token ficticio autorizado.
+        configure_mcp_github_environment(&mut command, token_autorizado);
+
+        let output = command.output().await.expect("debe existir el comando env");
+        assert!(output.status.success(), "el proceso de prueba debe finalizar bien");
+
+        let text = String::from_utf8(output.stdout).expect("salida UTF-8 del proceso de prueba");
+        text.lines()
+            .filter_map(|line| line.split_once('='))
+            .filter(|(key, _)| {
+                matches!(
+                    *key,
+                    "GITHUB_PERSONAL_ACCESS_TOKEN" | "GITHUB_TOKEN" | "GH_TOKEN"
+                )
+            })
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect()
+    }
+
+    /// Sin autorización, ni siquiera los tokens heredados ficticios llegan al hijo.
+    #[tokio::test]
+    async fn no_autorizado_no_hereda_credenciales_github() {
+        let variables = probe_environment("").await;
+        assert!(
+            variables.is_empty(),
+            "un servidor no autorizado no debe recibir variables GitHub"
+        );
+    }
+
+    /// Con autorización, el proceso recibe sólo el token ficticio indicado.
+    /// GH_TOKEN continúa eliminado porque no se usa para esta integración.
+    #[tokio::test]
+    async fn autorizado_recibe_solo_token_ficticio() {
+        let variables = probe_environment("E0_DUMMY_AUTORIZADO").await;
+        assert_eq!(
+            variables.get("GITHUB_PERSONAL_ACCESS_TOKEN").map(String::as_str),
+            Some("E0_DUMMY_AUTORIZADO")
+        );
+        assert_eq!(
+            variables.get("GITHUB_TOKEN").map(String::as_str),
+            Some("E0_DUMMY_AUTORIZADO")
+        );
+        assert!(!variables.contains_key("GH_TOKEN"));
     }
 }
