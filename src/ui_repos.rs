@@ -1,3 +1,6 @@
+//! Pantalla principal del listado de repositorios de GitHub.
+//! Permite filtrar, ordenar y seleccionar repositorios, además de cerrar la sesión.
+
 use crate::app::{ActiveTab, GitCraftApp, RepoSortColumn};
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
@@ -54,6 +57,7 @@ fn sort_header_button(ui: &mut egui::Ui, label: &str, col: RepoSortColumn, app: 
 }
 
 // Dibuja la pestaña de Repositorios con buscador, ordenación por columnas y tabla de 5 columnas.
+/// Dibuja la tabla de repositorios y comunica las elecciones al controlador de la app.
 pub fn render_repos_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
 
