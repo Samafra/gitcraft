@@ -95,15 +95,16 @@ pub fn detect_git() -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output).trim().to_string())
 }
 
-/// Ejecuta exclusivamente un comando Git de consulta y devuelve sus bytes.
+/// Ejecuta un subcomando Git con argumentos independientes y devuelve sus bytes.
 ///
-/// No se utiliza "sh -c", "cmd /C", ni ninguna expansión de shell: cada
-/// argumento es un valor independiente. Se desactiva fsmonitor, que en ciertas
-/// configuraciones podría lanzar procesos externos, y los bloqueos opcionales
-/// que el comando status puede emplear para actualizar el índice.
+/// Este ejecutor es compartido por las lecturas E1 y las acciones E2.
+/// **No decide si una operación puede escribir:** E2 realiza la comprobación
+/// y la confirmación explícita antes de invocar un comando que modifica Git.
 ///
-/// La lista de argumentos sólo la construyen las funciones de este módulo,
-/// nunca es un texto arbitrario introducido por la persona usuaria.
+/// No se utiliza "sh -c", "cmd /C" ni expansión de shell. Se desactiva
+/// fsmonitor y los bloqueos opcionales; Git sigue usando los bloqueos
+/// obligatorios que necesita para actualizar su índice. Los argumentos
+/// sólo los construyen módulos internos, nunca un comando arbitrario de UI.
 pub(crate) fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, String> {
     let mut command = Command::new("git");
     command
