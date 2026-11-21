@@ -80,27 +80,62 @@ fn client_and_base(token: &str) -> Result<(reqwest::Client, String), String> {
     Ok((client, api))
 }
 
+/// Lee una colección de la API GitHub y valida antes el código HTTP.
+///
+/// Devuelve `Err` para errores como 403 (sin permisos) y 429 (límite alcanzado):
+/// de lo contrario, una pantalla podría confundir un fallo con una lista vacía.
+/// `T` representa el tipo de respuesta JSON esperado (por ejemplo, `Vec<IssueItem>`).
+async fn fetch_collection<T: serde::de::DeserializeOwned>(
+    client: &reqwest::Client,
+    url: String,
+    resource: &str,
+) -> Result<T, String> {
+    // Primero terminamos la petición; un error de red se comunica al usuario.
+    let response = client.get(url).send().await
+        .map_err(|error| format!("Fallo de red al consultar {}: {}", resource, error))?;
+    let status = response.status();
+    if !status.is_success() {
+        // Limitar la longitud de la respuesta para no llenar el panel de errores.
+        let details = response.text().await.unwrap_or_default();
+        let details: String = details.chars().take(240).collect();
+        return Err(format!("GitHub respondió {} al consultar {}: {}", status, resource, details));
+    }
+    // Un HTTP 200 con JSON inesperado también es un error, no una lista vacía.
+    response.json::<T>().await
+        .map_err(|error| format!("Respuesta JSON no válida para {}: {}", resource, error))
+}
+
 // Descarga PRs, Issues, Actions y Releases del repositorio seleccionado.
 pub async fn fetch_management_data(token: String, full_name: String) -> Result<RepoManagementData, String> {
     let (client, api) = client_and_base(&token)?;
 
-    let prs: Vec<PullRequestItem> = client
-        .get(format!("{}/repos/{}/pulls?state=open&per_page=50", api, full_name))
-        .send().await.map_err(|e| e.to_string())?.json().await.unwrap_or_default();
+    // La API GitHub tiene endpoints independientes para cada colección. Cualquier
+    // error se devuelve como `Err`; nunca se disfraza de lista vacía.
+    let prs: Vec<PullRequestItem> = fetch_collection(
+        &client,
+        format!("{}/repos/{}/pulls?state=open&per_page=50", api, full_name),
+        "Pull Requests",
+    ).await?;
 
-    let all_issues: Vec<IssueItem> = client
-        .get(format!("{}/repos/{}/issues?state=open&per_page=50", api, full_name))
-        .send().await.map_err(|e| e.to_string())?.json().await.unwrap_or_default();
-    // Filtramos solo Issues reales (los que no tienen el campo pull_request).
-    let issues = all_issues.into_iter().filter(|i| i.pull_request.is_none()).collect();
+    let all_issues: Vec<IssueItem> = fetch_collection(
+        &client,
+        format!("{}/repos/{}/issues?state=open&per_page=50", api, full_name),
+        "Issues",
+    ).await?;
+    // GitHub incluye PRs en el endpoint de Issues: los excluimos de esa pestaña.
+    let issues = all_issues.into_iter().filter(|item| item.pull_request.is_none()).collect();
 
-    let runs_wrap: WorkflowRunsWrapper = client
-        .get(format!("{}/repos/{}/actions/runs?per_page=20", api, full_name))
-        .send().await.map_err(|e| e.to_string())?.json().await.unwrap_or_default();
+    let runs_wrap: WorkflowRunsWrapper = fetch_collection(
+        &client,
+        format!("{}/repos/{}/actions/runs?per_page=20", api, full_name),
+        "GitHub Actions",
+    ).await?;
 
-    let releases: Vec<ReleaseItem> = client
-        .get(format!("{}/repos/{}/releases?per_page=20", api, full_name))
-        .send().await.map_err(|e| e.to_string())?.json().await.unwrap_or_default();
+    let releases: Vec<ReleaseItem> = fetch_collection(
+        &client,
+        format!("{}/repos/{}/releases?per_page=20", api, full_name),
+        "Releases",
+    ).await?;
 
     Ok(RepoManagementData { prs, issues, runs: runs_wrap.workflow_runs, releases })
 }
@@ -162,4 +197,54 @@ pub async fn create_release(token: String, full_name: String, tag: String, name:
         .send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() { return Err(resp.text().await.unwrap_or_default()); }
     Ok(())
+}
+
+// Pruebas de respuesta HTTP contra un servidor de prueba local, nunca contra GitHub.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Envía una respuesta HTTP controlada para poder simular errores de GitHub.
+    /// El servidor dura una sola petición y no modifica repositorios reales.
+    fn start_test_server(status: &str, body: &str) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("puerto de pruebas");
+        let address = listener.local_addr().expect("dirección de pruebas");
+        let response = format!(
+            "HTTP/1.1 {}\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+            status,
+            body.len(),
+            body,
+        );
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("petición de prueba");
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer);
+            stream.write_all(response.as_bytes()).expect("respuesta de prueba");
+        });
+        (format!("http://{}", address), handle)
+    }
+
+    /// Un HTTP 403 no debe convertirse en una colección vacía de Issues.
+    #[tokio::test]
+    async fn permission_denied_is_reported() {
+        let (url, server) = start_test_server("403 Forbidden", r#"{"message":"Forbidden"}"#);
+        let result: Result<Vec<IssueItem>, String> =
+            fetch_collection(&reqwest::Client::new(), url, "Issues").await;
+        server.join().expect("servidor de pruebas finalizado");
+        let error = result.expect_err("403 debe generar error");
+        assert!(error.contains("403"));
+        assert!(error.contains("Issues"));
+    }
+
+    /// Una petición limitada por GitHub tampoco debe mostrarse sin resultados.
+    #[tokio::test]
+    async fn rate_limit_is_reported() {
+        let (url, server) = start_test_server("429 Too Many Requests", r#"{"message":"Rate limit"}"#);
+        let result: Result<Vec<IssueItem>, String> =
+            fetch_collection(&reqwest::Client::new(), url, "Issues").await;
+        server.join().expect("servidor de pruebas finalizado");
+        assert!(result.expect_err("429 debe generar error").contains("429"));
+    }
 }
