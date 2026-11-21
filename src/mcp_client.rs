@@ -1,9 +1,15 @@
+//! Cliente MCP de GitCraft.
+//!
+//! MCP permite pedir a programas o servicios externos que ejecuten herramientas.
+//! Se distingue entre Stdio (proceso local, sólo escritorio) y HTTP (servicio remoto).
+//! El token GitHub nunca debe compartirse con procesos por defecto.
 // Cliente estándar Model Context Protocol (MCP) basado en JSON-RPC 2.0.
 // Implementa el handshake secuencial oficial: initialize -> respuesta -> notifications/initialized -> tools/list.
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Medio de comunicación con un servidor MCP.
 pub enum McpTransport {
     Stdio, // Ejecuta un binario o script local (codex mcp-server, npx, uvx, python).
     Http,  // Se conecta a un servidor MCP vía HTTP POST JSON-RPC (compatible con Web/WASM).
@@ -11,6 +17,7 @@ pub enum McpTransport {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
+/// Nombre, descripción y esquema JSON de una herramienta disponible en un servidor MCP.
 pub struct McpTool {
     pub name: String,
     pub description: Option<String>,
@@ -18,6 +25,8 @@ pub struct McpTool {
     pub input_schema: Value,
 }
 
+/// Negocia la conexión y solicita al servidor la lista de herramientas que ofrece.
+/// En caso de fallo devuelve `Err` con información comprensible.
 pub async fn mcp_discover_tools(
     transport: McpTransport,
     endpoint: String,
@@ -47,6 +56,7 @@ pub async fn mcp_discover_tools(
     serde_json::from_value(Value::Array(tools_val.clone()))
         .map_err(|e| format!("Error parseando herramientas MCP: {}", e))
 }
+/// Ejecuta por nombre una herramienta MCP y devuelve su respuesta en JSON legible.
 pub async fn mcp_call_tool(
     transport: McpTransport,
     endpoint: String,
@@ -72,6 +82,8 @@ pub async fn mcp_call_tool(
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
+/// Intercambia mensajes con un servidor MCP. `async` permite esperar sin bloquear toda la UI.
+/// El tratamiento Stdio y HTTP difiere, especialmente en WebAssembly.
 async fn send_mcp_session(
     transport: McpTransport,
     endpoint: &str,
