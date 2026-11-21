@@ -4,7 +4,7 @@
 **Rama de implementación:** develop, exclusivamente.  
 **Punto de recuperación anterior a E3-B:** 448f42cac545c6e5e39bb8f3da5a1f06097b4d0c (E3-A cerrada en macOS Intel).  
 **Referencia estable main:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4.  
-**Estado:** IMPLEMENTADO EN DEVELOP. Pruebas Rust y pruebas visuales macOS Intel PENDIENTES.
+**Estado:** IMPLEMENTADO y VALIDACIÓN AUTOMÁTICA E3-B SUPERADA en macOS Intel, según resultado comunicado por el usuario. PRUEBAS VISUALES PENDIENTES.
 
 ## Objetivo y límites de la subetapa
 
@@ -120,15 +120,22 @@ set -o pipefail
 bash scripts/validar_e3b_local.sh 2>&1 | tee /tmp/gitcraft-e3b-validacion.log
 ~~~
 
-Resultado esperado, aún no confirmado:
+Resultado final confirmado por el usuario al ejecutar el script automático:
 
 ~~~text
 OK: controles automáticos E3-B completados; faltan pruebas visuales.
 ~~~
 
-El script ejecuta check, pruebas E3-B, regresiones E0/E1/E2/E3-A, Clippy,
-y WASM si está instalado su target. Los tests Rust crean referencias
-**sólo en sus propios repositorios temporales**. No se utilizan Actions.
+El usuario comunicó exactamente el resultado anterior tras ejecutar la
+validación sobre el commit `a261863ad0028286df31af3724dda8e2323eed80`.
+Esto acredita que las comprobaciones obligatorias del script finalizaron sin
+errores: Rustfmt, compilación nativa, los once tests E3-B, regresiones
+E0/E1/E2/E3-A y Clippy. La comprobación WASM es condicional; la línea final
+por sí sola no indica si ese target estaba instalado o se ejecutó.
+
+Los tests Rust crean referencias **sólo en sus propios repositorios
+temporales**. No se utilizan Actions. Este resultado automático no sustituye
+las pruebas manuales de doble confirmación y protección de HEAD/archivos.
 
 ## 2. Crear un repositorio TEMPORAL para pruebas visuales
 
@@ -214,7 +221,7 @@ git log -1 --oneline
 
 | Plataforma | Estado E3-B |
 | --- | --- |
-| macOS Intel | Implementada; validación automática y visual pendientes |
+| macOS Intel | Validación automática correcta; pruebas visuales pendientes |
 | macOS Apple Silicon | Pendiente |
 | Linux | Pendiente |
 | Windows | Pendiente; comprobar semántica de hooks y rutas |
