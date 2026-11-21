@@ -340,3 +340,68 @@ fn draw_lines(ui: &mut egui::Ui, id: &str, entries: &[String]) {
             }
         });
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    /// Construye un resumen ficticio sin ejecutar Git ni acceder a archivos.
+    /// Así se comprueba el estado de la UI independientemente del motor.
+    fn fixture_overview() -> GitHistoryOverview {
+        GitHistoryOverview {
+            root: PathBuf::from("/gitcraft-e3-test-ficticio"),
+            graph: "* abc123 Primer commit".into(),
+            revisions: vec![
+                HistoryRevision {
+                    sha: "a".repeat(40),
+                    short_sha: "aaaaaaa".into(),
+                    subject: "Segundo".into(),
+                },
+                HistoryRevision {
+                    sha: "b".repeat(40),
+                    short_sha: "bbbbbbb".into(),
+                    subject: "Primero".into(),
+                },
+            ],
+            reflog: vec!["reflog ficticio".into()],
+            tags: vec!["test-v1".into()],
+            stash: Vec::new(),
+            tracked_files: vec!["archivo.txt".into()],
+            tracked_truncated: false,
+        }
+    }
+
+    /// La selección inicial propone dos revisiones diferentes y un archivo.
+    #[test]
+    fn history_defaults_select_two_distinct_commits() {
+        let mut state = HistoryUiState::default();
+        state.accept_overview(fixture_overview());
+        assert_eq!(state.base_sha, "b".repeat(40));
+        assert_eq!(state.target_sha, "a".repeat(40));
+        assert_eq!(state.selected_file, "archivo.txt");
+        assert!(!state.loading);
+    }
+
+    /// Cambiar de repositorio revoca la consulta y descarta datos previos.
+    #[test]
+    fn invalidate_discards_data_and_advances_generations() {
+        let mut state = HistoryUiState::default();
+        state.accept_overview(fixture_overview());
+        state.detail = "un diff antiguo".into();
+        state.detail_label = "Blame viejo".into();
+        let previous_overview = state.overview_generation;
+        let previous_detail = state.detail_generation;
+
+        state.invalidate();
+
+        assert!(state.overview.is_none());
+        assert!(state.detail.is_empty());
+        assert!(state.detail_label.is_empty());
+        assert!(state.base_sha.is_empty());
+        assert!(state.selected_file.is_empty());
+        assert_ne!(state.overview_generation, previous_overview);
+        assert_ne!(state.detail_generation, previous_detail);
+    }
+}
