@@ -4,7 +4,7 @@
 **Rama:** develop (únicamente).  
 **Rollback previo:** d9482955da7783a3b2894df52c98584b25ddbf84 (E1 validada).  
 **main:** c208de70e87c7eabf5e5e1fea5546aa1bae43ef4 (intacta).  
-**Estado:** IMPLEMENTADO y VALIDACIÓN AUTOMÁTICA E2 SUPERADA en macOS Intel, según resultado comunicado por el usuario. PRUEBAS MANUALES DE STAGE/UNSTAGE/COMMIT PENDIENTES.
+**Estado:** E2 VALIDADA EN macOS INTEL dentro del alcance probado. Validación automática correcta y siete verificaciones manuales correctas, sin observaciones, realizadas en repositorio temporal independiente. La validación en macOS ARM, Linux, Windows y navegador permanece pendiente. `main` no se ha modificado.
 
 ## Evidencia de validación automática — 21/11/2026
 
@@ -16,7 +16,23 @@ OK: controles automáticos E2 completados; faltan pruebas manuales.
 
 Este resultado acredita que el script terminó con cero fallos en sus comprobaciones obligatorias: Rustfmt, compilación nativa, tests E2, suite de regresión y Clippy. WebAssembly se comprueba condicionalmente cuando está instalado su target; el resultado final por sí solo no identifica si se ejecutó esa sección.
 
-El siguiente requisito es comprobar visualmente **stage, unstage, vista previa y commit local** sobre un repositorio temporal independiente. No se declara E2 cerrada ni validación de las demás plataformas.
+**La validación visual se realizó posteriormente y quedó registrada en la siguiente sección.** Este resultado automático, por sí solo, no acredita las plataformas restantes ni la ejecución de la interfaz.
+
+## Evidencia de pruebas manuales y cierre E2 en macOS Intel — 21/11/2026
+
+El usuario comunicó **OK en las siete comprobaciones manuales** realizadas en GitCraft E2, sin observaciones ni incidencias:
+
+1. Estado inicial y diff individual correctos.
+2. Preparación de archivo (*stage*) correcta después de la confirmación.
+3. Retirada del índice (*unstage*) correcta, conservando el contenido.
+4. Preparación correcta de un archivo nuevo no seguido.
+5. Commit local creado correctamente sin realizar push.
+6. Vista previa obsoleta rechazada sin aplicar la operación.
+7. Repositorio original GitCraft sin modificaciones.
+
+Las pruebas manuales de escritura se realizaron siguiendo el procedimiento previsto con un repositorio temporal, independiente de `Samafra/gitcraft`. Junto con la validación automática previamente comunicada, estas evidencias satisfacen los criterios acordados para **E2 en macOS Intel**.
+
+**Cierre:** E2 queda **VALIDADA EN macOS INTEL para el alcance implementado**. No se afirma validación de otras plataformas ni auditoría de todas las posibles condiciones de concurrencia. La desactivación de hooks y firma GPG en los commits E2 y la ausencia de un bloqueo transaccional siguen siendo limitaciones expresas. No se realiza ninguna integración en `main`, ni se autoriza a hacerlo sin verificación y autorización explícita.
 
 ## Alcance
 
@@ -143,10 +159,10 @@ No borrar el repositorio temporal antes de revisar el resultado.
 
 | Plataforma | Estado |
 | --- | --- |
-| macOS Intel | Validación automática E2 superada; pruebas visuales pendientes |
+| macOS Intel | **VALIDADA**: controles automáticos y siete pruebas manuales correctas |
 | macOS Apple Silicon | Pendiente |
 | Linux | Pendiente |
 | Windows | Pendiente de revisión específica de rutas y hooks |
 | WebAssembly | Sin motor nativo Git; pendiente de validar |
 
-E2 no se declarará validada hasta completar los controles automáticos y las pruebas manuales sobre un repositorio temporal. No se integrará en main sin autorización expresa y punto de recuperación comprobado.
+**Criterio de cierre satisfecho para macOS Intel:** controles automáticos y pruebas manuales en un repositorio temporal completados correctamente. E2 multiplataforma sigue pendiente conforme a la matriz. No se integrará en `main` sin autorización expresa, comprobación previa de las ramas y un punto de recuperación comprobado.
