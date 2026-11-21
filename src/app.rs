@@ -43,7 +43,8 @@ pub struct GitCraftApp {
     pub active_tab: ActiveTab,
     pub dark_mode: bool,
     pub show_mcp_sidebar: bool,
-    pub saved_token: String,
+    // El PAT sólo vive en memoria: nunca se serializa en las preferencias de eframe.
+    #[serde(skip)] pub saved_token: String,
     #[serde(skip)] pub i18n: I18nManager,
     #[serde(skip)] pub is_loading: bool,
     #[serde(skip)] pub status_notice: Option<(String, bool)>,
@@ -73,6 +74,9 @@ pub struct GitCraftApp {
     #[serde(skip)] pub new_rel_body: String,
     pub mcp_transport: McpTransport,
     pub mcp_endpoint: String,
+    // Permiso temporal, por dirección exacta, para transmitir el PAT a un proceso MCP.
+    // Nunca se guarda en disco ni se conserva tras reiniciar la aplicación.
+    #[serde(skip)] pub mcp_token_authorized_endpoint: Option<String>,
     #[serde(skip)] pub mcp_tools: Vec<McpTool>,
     #[serde(skip)] pub mcp_selected_tool: String,
     #[serde(skip)] pub mcp_tool_args: String,
@@ -94,6 +98,7 @@ impl Default for GitCraftApp {
             mgmt_data: RepoManagementData::default(), new_pr_title: String::new(), new_pr_head: String::new(), new_pr_base: "main".into(),
             new_issue_title: String::new(), new_issue_body: String::new(), new_rel_tag: String::new(), new_rel_name: String::new(), new_rel_body: String::new(),
             mcp_transport: McpTransport::Stdio, mcp_endpoint: "npx -y @modelcontextprotocol/server-github".into(),
+            mcp_token_authorized_endpoint: None,
             mcp_tools: Vec::new(), mcp_selected_tool: String::new(), mcp_tool_args: "{}".into(), mcp_last_output: String::new(),
             tx: Some(tx), rx: Some(rx),
         }
@@ -190,14 +195,27 @@ impl GitCraftApp {
         let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
         spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::MgmtActionDone(rerun_workflow(t, f, id).await)); });
     }
+    /// Indica si el usuario ha autorizado compartir el token con el comando MCP actual.
+    /// El permiso sólo existe durante esta sesión y se invalida al cambiar el destino.
+    pub fn mcp_token_is_authorized(&self) -> bool {
+        self.mcp_transport == McpTransport::Stdio
+            && self.mcp_token_authorized_endpoint.as_deref() == Some(self.mcp_endpoint.as_str())
+    }
+
+    /// Devuelve el token sólo cuando existe consentimiento explícito para este servidor.
+    /// Para cualquier servidor no autorizado se devuelve una cadena vacía.
+    fn token_for_mcp(&self) -> String {
+        if self.mcp_token_is_authorized() { self.saved_token.clone() } else { String::new() }
+    }
+
     pub fn trigger_mcp_discover(&mut self, ctx: egui::Context) {
         self.is_loading = true;
-        let (tr, ep, tok, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.saved_token.clone(), self.tx.clone().unwrap());
+        let (tr, ep, tok, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.token_for_mcp(), self.tx.clone().unwrap());
         spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::McpToolsLoaded(mcp_discover_tools(tr, ep, tok).await)); });
     }
     pub fn trigger_mcp_call(&mut self, ctx: egui::Context) {
         self.is_loading = true;
-        let (tr, ep, tok, tool, args, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.saved_token.clone(), self.mcp_selected_tool.clone(), self.mcp_tool_args.clone(), self.tx.clone().unwrap());
+        let (tr, ep, tok, tool, args, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.token_for_mcp(), self.mcp_selected_tool.clone(), self.mcp_tool_args.clone(), self.tx.clone().unwrap());
         spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::McpCallResult(mcp_call_tool(tr, ep, tok, tool, args).await)); });
     }
     pub fn trigger_create_release(&mut self, ctx: egui::Context) {
@@ -304,5 +322,39 @@ impl eframe::App for GitCraftApp {
                 ActiveTab::Mcp => render_mcp_ui(self, ui, ctx),
             }
         });
+    }
+}
+
+// Pruebas de seguridad sin acceso a GitHub ni ejecución de programas externos.
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    /// Comprueba que el token en memoria no se escribe en el JSON de preferencias.
+    #[test]
+    fn github_token_is_not_persisted() {
+        let mut app = GitCraftApp::default();
+        app.saved_token = "token_de_prueba_no_real".into();
+        let preferences = serde_json::to_value(&app).expect("el estado debe poder serializarse");
+        assert!(preferences.get("saved_token").is_none());
+        // La carga de preferencias antiguas ignora un token que antes pudiera persistirse.
+        let old = serde_json::json!({"saved_token":"secreto_antiguo"});
+        let reloaded: GitCraftApp = serde_json::from_value(old).expect("configuración antigua válida");
+        assert!(reloaded.saved_token.is_empty());
+    }
+
+    /// Nadie recibe un PAT de forma implícita, ni siquiera el servidor MCP por defecto.
+    #[test]
+    fn mcp_token_requires_explicit_consent_for_exact_endpoint() {
+        let mut app = GitCraftApp::default();
+        app.saved_token = "token_de_prueba_no_real".into();
+        assert!(app.token_for_mcp().is_empty());
+        app.mcp_token_authorized_endpoint = Some(app.mcp_endpoint.clone());
+        assert_eq!(app.token_for_mcp(), app.saved_token);
+        app.mcp_endpoint = "otro-programa-mcp".into();
+        assert!(app.token_for_mcp().is_empty());
+        app.mcp_endpoint = "npx -y @modelcontextprotocol/server-github".into();
+        app.mcp_transport = McpTransport::Http;
+        assert!(app.token_for_mcp().is_empty());
     }
 }
