@@ -262,17 +262,20 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         });
     }
 
-    // Copiamos el preview para no mantener un préstamo de app mientras
-    // el botón de confirmación modifica su estado.
-    if let Some(preview) = app.local_action_preview.clone() {
+    // Se copian sólo los textos y la operación. No clonamos el índice
+    // completo en cada frame: su huella puede ser grande en repositorios reales.
+    if let Some(preview) = app.local_action_preview.as_ref() {
+        let summary = preview.summary.clone();
+        let details = preview.details.clone();
+        let action = preview.action.clone();
         ui.group(|ui| {
             ui.heading(app.i18n.t(lang, "e2_confirm_title"));
-            ui.label(&preview.summary);
+            ui.label(&summary);
             egui::ScrollArea::vertical()
                 .id_salt("local_action_preview_scroll")
                 .max_height(110.0)
                 .show(ui, |ui| {
-                    ui.monospace(&preview.details);
+                    ui.monospace(&details);
                 });
             ui.label(
                 egui::RichText::new(app.i18n.t(lang, "e2_confirm_notice"))
@@ -280,7 +283,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                     .small(),
             );
             ui.horizontal(|ui| {
-                let message_ok = match &preview.action {
+                let message_ok = match &action {
                     LocalAction::Commit(message) => {
                         message.as_str() == app.local_commit_message.trim()
                     }
