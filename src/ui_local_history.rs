@@ -272,6 +272,10 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             }
         });
 
+        // E3-B se integra después del comparador sin cambiar sus controles.
+        // Sólo muestra escrituras limitadas a nuevas ramas y etiquetas locales.
+        render_ref_creation_panel(app, ui, ctx, &overview, can_query);
+
         ui.group(|ui| {
             ui.label(egui::RichText::new(app.i18n.t(lang, "e3_blame")).strong());
             if overview.tracked_files.is_empty() {
@@ -356,6 +360,143 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                             .desired_rows(12),
                     );
                 });
+        }
+    });
+}
+
+/// E3-B: presenta una creación de referencia en dos pasos obligatorios.
+///
+/// Los formularios son temporales. Un cambio en nombre, tipo o commit revoca
+/// cualquier vista previa; sólo una segunda pulsación puede crear la referencia.
+fn render_ref_creation_panel(
+    app: &mut GitCraftApp,
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    overview: &GitHistoryOverview,
+    can_query: bool,
+) {
+    let lang = app.language;
+    ui.group(|ui| {
+        ui.label(egui::RichText::new(app.i18n.t(lang, "e3b_title")).strong());
+        ui.label(
+            egui::RichText::new(app.i18n.t(lang, "e3b_warning"))
+                .weak()
+                .small(),
+        );
+
+        if overview.revisions.is_empty() {
+            ui.label(app.i18n.t(lang, "e3b_no_commits"));
+            return;
+        }
+
+        // Un estado de formulario no debe editarse mientras un comando Git
+        // está consultando o creando una referencia para este panel.
+        let mut changed = false;
+        ui.add_enabled_ui(!app.history.ref_loading, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                changed |= ui
+                    .selectable_value(
+                        &mut app.history.ref_kind,
+                        RefKind::Branch,
+                        app.i18n.t(lang, "e3b_branch"),
+                    )
+                    .changed();
+                changed |= ui
+                    .selectable_value(
+                        &mut app.history.ref_kind,
+                        RefKind::Tag,
+                        app.i18n.t(lang, "e3b_tag"),
+                    )
+                    .changed();
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(app.i18n.t(lang, "e3b_name"));
+                changed |= ui
+                    .add(
+                        egui::TextEdit::singleline(&mut app.history.ref_name)
+                            .desired_width(270.0)
+                            .hint_text(app.i18n.t(lang, "e3b_name_hint")),
+                    )
+                    .changed();
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.label(app.i18n.t(lang, "e3b_destination"));
+                let label = revision_label(&overview.revisions, &app.history.ref_target);
+                egui::ComboBox::from_id_salt("e3b_commit_target")
+                    .selected_text(label)
+                    .width(300.0)
+                    .show_ui(ui, |ui| {
+                        for revision in &overview.revisions {
+                            changed |= ui
+                                .selectable_value(
+                                    &mut app.history.ref_target,
+                                    revision.sha.clone(),
+                                    revision_label(&overview.revisions, &revision.sha),
+                                )
+                                .changed();
+                        }
+                    });
+            });
+        });
+
+        if changed {
+            app.cancel_local_ref();
+        }
+
+        if ui
+            .add_enabled(
+                can_query
+                    && !app.history.ref_loading
+                    && !app.history.ref_name.trim().is_empty()
+                    && !app.history.ref_target.is_empty(),
+                egui::Button::new(app.i18n.t(lang, "e3b_preview")),
+            )
+            .clicked()
+        {
+            app.preview_local_ref(ctx.clone());
+        }
+
+        if app.history.ref_loading {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(app.i18n.t(lang, "e3b_loading"));
+            });
+        }
+        if let Some(error) = &app.history.ref_error {
+            ui.colored_label(egui::Color32::LIGHT_RED, error);
+        }
+
+        // No se copia la huella de estado Git en cada frame. Sólo se leen
+        // texto y parámetros visibles del objeto de confirmación en memoria.
+        if let Some(preview) = app.history.ref_preview.as_ref() {
+            let summary = preview.summary.clone();
+            let params = preview.action.clone();
+            ui.separator();
+            ui.label(egui::RichText::new(app.i18n.t(lang, "e3b_confirmation")).strong());
+            ui.label(summary);
+            ui.horizontal(|ui| {
+                let selection_unchanged = params.kind == app.history.ref_kind
+                    && params.name == app.history.ref_name
+                    && params.target == app.history.ref_target;
+                if ui
+                    .add_enabled(
+                        can_query && selection_unchanged && !app.history.ref_loading,
+                        egui::Button::new(app.i18n.t(lang, "e3b_confirm")),
+                    )
+                    .clicked()
+                {
+                    app.confirm_local_ref(ctx.clone());
+                }
+                if ui
+                    .add_enabled(
+                        !app.history.ref_loading,
+                        egui::Button::new(app.i18n.t(lang, "e3b_cancel")),
+                    )
+                    .clicked()
+                {
+                    app.cancel_local_ref();
+                }
+            });
         }
     });
 }
