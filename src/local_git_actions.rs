@@ -162,13 +162,26 @@ pub fn preview_action(root: &Path, action: LocalAction) -> Result<LocalActionPre
                  su contenido antes de añadirlo."
                     .to_string()
             } else {
-                let args = if matches!(&action, LocalAction::Stage(_)) {
+                // Se fija Vec<&str> para que todas las rutas y opciones se
+                // conviertan en argumentos de texto independientes para Git.
+                let args: Vec<&str> = if matches!(&action, LocalAction::Stage(_)) {
                     vec![
-                        "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--", file,
+                        "diff",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--no-color",
+                        "--",
+                        file,
                     ]
                 } else {
                     vec![
-                        "diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color", "--", file,
+                        "diff",
+                        "--cached",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--no-color",
+                        "--",
+                        file,
                     ]
                 };
                 let raw = run_git(Some(&path), &args)?;
