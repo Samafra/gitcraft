@@ -479,11 +479,14 @@ mod tests {
         let hooks = fixture.root.join("hooks-e3b");
         std::fs::create_dir(&hooks).unwrap();
         let script = hooks.join("reference-transaction");
-        std::fs::write(
-            &script,
-            "#!/bin/sh\nprintf 'ejecutado' > hook-ejecutado.txt\n",
-        )
-        .unwrap();
+        // Se usa una ruta absoluta, ya que Git puede ejecutar hooks
+        // desde .git en lugar de la raíz del directorio de trabajo.
+        let marker = fixture.root.join("hook-ejecutado.txt");
+        let body = format!(
+            "#!/bin/sh\nprintf 'ejecutado' > \"{}\"\n",
+            marker.display()
+        );
+        std::fs::write(&script, body).unwrap();
         let mut permissions = std::fs::metadata(&script).unwrap().permissions();
         permissions.set_mode(0o755);
         std::fs::set_permissions(&script, permissions).unwrap();
@@ -496,7 +499,7 @@ mod tests {
         )
         .unwrap();
         execute_ref(&preview).unwrap();
-        assert!(!fixture.root.join("hook-ejecutado.txt").exists());
+        assert!(!marker.exists());
     }
 
     /// Crear otra referencia mientras se revisa invalida la confirmación.
