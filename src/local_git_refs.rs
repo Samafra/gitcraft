@@ -166,6 +166,73 @@ fn append_section(out: &mut Vec<u8>, bytes: &[u8]) {
     out.extend_from_slice(bytes);
 }
 
+/// Añade huellas del contenido visible en archivos modificados o nuevos.
+///
+/// Dos versiones distintas de un archivo pueden seguir mostrando el mismo
+/// estado de Git, por ejemplo « M». La mera comparación de status no detecta
+/// esos cambios; por eso se calcula también el hash del contenido actual.
+///
+/// Se seleccionan exclusivamente los archivos modificados o no seguidos
+/// devueltos por Git. Nunca se siguen enlaces simbólicos a otras carpetas:
+/// para ellos se guarda el nombre del enlace, sin leer el destino externo.
+fn append_worktree_fingerprints(
+    root: &Path,
+    stamp: &mut Vec<u8>,
+) -> Result<(), String> {
+    let paths = run_git(
+        Some(root),
+        &[
+            "ls-files",
+            "--modified",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
+    )?;
+    append_section(stamp, &paths);
+
+    // Las rutas Git vienen separadas por un byte NUL: espacios o comillas
+    // dentro de un nombre no pueden convertirse en argumentos adicionales.
+    for bytes in paths.split(|value| *value == 0).filter(|part| !part.is_empty()) {
+        let relative = std::str::from_utf8(bytes)
+            .map_err(|_| "E3-B no admite rutas de archivo que no sean UTF-8.".to_string())?;
+        let location = root.join(relative);
+        match std::fs::symlink_metadata(&location) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                // read_link lee la ruta simbólica, no el archivo al que apunta.
+                let destination = std::fs::read_link(&location)
+                    .map_err(|error| format!("No se pudo leer el enlace: {}", error))?;
+                append_section(stamp, destination.to_string_lossy().as_bytes());
+            }
+            Ok(meta) if meta.is_file() => {
+                // Evitamos acceder fuera del repositorio por un enlace
+                // simbólico en uno de los directorios intermedios.
+                let real = location
+                    .canonicalize()
+                    .map_err(|error| format!("No se pudo resolver el archivo: {}", error))?;
+                if !real.starts_with(root) {
+                    return Err("Un archivo modificado está fuera de la raíz Git.".into());
+                }
+                // hash-object sin -w sólo calcula el identificador: no escribe
+                // objetos ni altera el árbol de trabajo o el índice.
+                let hash = run_git(
+                    Some(root),
+                    &["hash-object", "--no-filters", "--", relative],
+                )?;
+                append_section(stamp, &hash);
+            }
+            Ok(_) => append_section(stamp, b"<entrada no regular>"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                append_section(stamp, b"<archivo eliminado>");
+            }
+            Err(error) => {
+                return Err(format!("No se pudo inspeccionar un archivo: {}", error));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Construye una fotografía para detectar cambios mientras se confirma.
 ///
 /// Incluye archivos modificados, contenido del índice, ramas, etiquetas,
@@ -186,6 +253,9 @@ fn safety_stamp(root: &Path) -> Result<Vec<u8>, String> {
         let result = run_git(Some(root), args)?;
         append_section(&mut stamp, &result);
     }
+    // El contenido puede cambiar aun cuando todos los códigos de estado
+    // permanezcan iguales. Guardamos una huella adicional por archivo.
+    append_worktree_fingerprints(root, &mut stamp)?;
     let head = run_git(Some(root), &["rev-parse", "--verify", "HEAD"])?;
     append_section(&mut stamp, &head);
     let branch = run_git(Some(root), &["symbolic-ref", "-q", "--short", "HEAD"])
@@ -500,6 +570,47 @@ mod tests {
         .unwrap();
         execute_ref(&preview).unwrap();
         assert!(!marker.exists());
+    }
+
+    /// Dos versiones distintas pueden mostrar el mismo código de Git « M».
+    ///
+    /// Este caso detecta una confirmación antigua incluso cuando status,
+    /// índice, HEAD y ramas permanecen visualmente iguales.
+    #[test]
+    fn second_edit_with_same_status_rejects_preview() {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.root.join("ejemplo.txt"), "primera edición\n").unwrap();
+        let preview = preview_ref(
+            &fixture.root,
+            fixture.action(RefKind::Branch, "cambio-oculto"),
+        )
+        .unwrap();
+        std::fs::write(fixture.root.join("ejemplo.txt"), "segunda edición\n").unwrap();
+        assert!(execute_ref(&preview).is_err());
+        assert!(fixture.git(&["branch", "--list", "cambio-oculto"]).is_empty());
+    }
+
+    /// Si cambia el contenido de un archivo no seguido, también se rechaza.
+    ///
+    /// La lista de archivos «??» sigue teniendo el mismo nombre, pero su
+    /// huella cambia. No se crea la etiqueta ni se elimina el archivo nuevo.
+    #[test]
+    fn edited_untracked_content_rejects_preview() {
+        let fixture = Fixture::new();
+        let name = "nuevo archivo.txt";
+        std::fs::write(fixture.root.join(name), "versión uno\n").unwrap();
+        let preview = preview_ref(
+            &fixture.root,
+            fixture.action(RefKind::Tag, "tag-obsoleta"),
+        )
+        .unwrap();
+        std::fs::write(fixture.root.join(name), "versión dos\n").unwrap();
+        assert!(execute_ref(&preview).is_err());
+        assert!(fixture.git(&["tag", "--list", "tag-obsoleta"]).is_empty());
+        assert_eq!(
+            std::fs::read_to_string(fixture.root.join(name)).unwrap(),
+            "versión dos\n"
+        );
     }
 
     /// Crear otra referencia mientras se revisa invalida la confirmación.
