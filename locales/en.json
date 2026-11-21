@@ -93,5 +93,18 @@
   "local_empty_diff": "No differences for this selection.",
   "local_untracked_note": "Untracked files appear in Status but not in git diff.",
   "local_without_github_hint": "You can also use the Local Git tab without signing in to GitHub.",
-  "local_web_unavailable": "Access to the locally installed Git is only available on desktop, not in the browser."
+  "local_web_unavailable": "Access to the locally installed Git is only available on desktop, not in the browser.",
+  "e2_stage": "Stage",
+  "e2_unstage": "Unstage",
+  "e2_diff_file": "File diff",
+  "e2_diff_index": "Staged diff",
+  "e2_commit_title": "Local commit",
+  "e2_commit_hint": "Commit message (test repositories only)...",
+  "e2_preview_commit": "Preview commit",
+  "e2_commit_warning": "E2 changes the index or HEAD after confirmation. No push or file discard. Commits run without hooks or GPG signing; test first in a temporary repository.",
+  "e2_action_loading": "Checking local action...",
+  "e2_confirm_title": "Confirm local Git action",
+  "e2_confirm_notice": "Review files and branch. Git state is checked again before writing; if it changed, the action is rejected.",
+  "e2_confirm": "Confirm action",
+  "e2_cancel": "Cancel without changes"
 }
