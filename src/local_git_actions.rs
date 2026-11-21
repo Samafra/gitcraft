@@ -58,6 +58,12 @@ fn safety_stamp(root: &Path) -> Result<Vec<u8>, String> {
         .unwrap_or_default();
     stamp.extend_from_slice(&(head.len() as u64).to_be_bytes());
     stamp.extend_from_slice(&head);
+    // Dos ramas distintas pueden apuntar al mismo SHA. Guardar también el
+    // nombre simbólico de HEAD impide confirmar un commit en otra rama.
+    let branch = run_git(Some(root), &["symbolic-ref", "-q", "--short", "HEAD"])
+        .unwrap_or_default();
+    stamp.extend_from_slice(&(branch.len() as u64).to_be_bytes());
+    stamp.extend_from_slice(&branch);
     Ok(stamp)
 }
 
@@ -433,6 +439,27 @@ mod tests {
         std::fs::write(fixture.root.join("nuevo.txt"), "otro cambio\n").unwrap();
         fixture.git(&["add", "--", "nuevo.txt"]);
         assert!(execute_confirmed_action(&preview).is_err());
+    }
+
+    /// Si se cambia de rama mientras se revisa el commit, no se ejecuta
+    /// aunque ambas ramas apunten inicialmente al mismo commit.
+    #[test]
+    fn branch_switch_rejects_old_commit_preview() {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.root.join("original.txt"), "preparado\n").unwrap();
+        fixture.git(&["add", "--", "original.txt"]);
+        let preview = preview_action(
+            &fixture.root,
+            LocalAction::Commit("Commit para rama antigua".into()),
+        )
+        .unwrap();
+        fixture.git(&["branch", "otra"]);
+        fixture.git(&["symbolic-ref", "HEAD", "refs/heads/otra"]);
+        assert!(execute_confirmed_action(&preview).is_err());
+        assert_eq!(
+            fixture.git(&["rev-parse", "HEAD"]),
+            fixture.git(&["rev-parse", "prueba-e2"])
+        );
     }
 
     /// Un commit sólo incluye el contenido staged y no envía datos al remoto.
