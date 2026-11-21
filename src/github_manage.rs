@@ -1,3 +1,8 @@
+//! Funciones de gestión remota en GitHub: Pull Requests, Issues, Actions y Releases.
+//!
+//! Todas estas operaciones usan HTTP, no modifican directamente un repositorio Git local.
+//! Los fallos HTTP deben propagarse y no confundirse con una lista vacía.
+
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -106,6 +111,8 @@ async fn fetch_collection<T: serde::de::DeserializeOwned>(
 }
 
 // Descarga PRs, Issues, Actions y Releases del repositorio seleccionado.
+/// Recupera las colecciones de gestión para un repositorio concreto.
+/// Ante cualquier respuesta HTTP o JSON errónea devuelve `Err`, nunca datos inventados.
 pub async fn fetch_management_data(token: String, full_name: String) -> Result<RepoManagementData, String> {
     let (client, api) = client_and_base(&token)?;
 
@@ -141,6 +148,7 @@ pub async fn fetch_management_data(token: String, full_name: String) -> Result<R
 }
 
 // Crea un nuevo Pull Request.
+/// Abre un Pull Request entre dos ramas del repositorio indicado.
 pub async fn create_pr(token: String, full_name: String, title: String, head: String, base: String) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
     let resp = client.post(format!("{}/repos/{}/pulls", api, full_name))
@@ -151,6 +159,7 @@ pub async fn create_pr(token: String, full_name: String, title: String, head: St
 }
 
 // Fusiona (Merge) un Pull Request abierto.
+/// Fusiona un Pull Request mediante GitHub, con los permisos del usuario autenticado.
 pub async fn merge_pr(token: String, full_name: String, pr_number: u64) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
     let resp = client.put(format!("{}/repos/{}/pulls/{}/merge", api, full_name, pr_number))
@@ -161,6 +170,7 @@ pub async fn merge_pr(token: String, full_name: String, pr_number: u64) -> Resul
 }
 
 // Crea un nuevo Issue.
+/// Crea un Issue con título y contenido en el repositorio remoto.
 pub async fn create_issue(token: String, full_name: String, title: String, body: String) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
     let resp = client.post(format!("{}/repos/{}/issues", api, full_name))
@@ -171,6 +181,7 @@ pub async fn create_issue(token: String, full_name: String, title: String, body:
 }
 
 // Cierra un Issue abierto.
+/// Cambia un Issue a cerrado, preservando sus mensajes y comentarios.
 pub async fn close_issue(token: String, full_name: String, issue_number: u64) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
     let resp = client.patch(format!("{}/repos/{}/issues/{}", api, full_name, issue_number))
@@ -181,6 +192,7 @@ pub async fn close_issue(token: String, full_name: String, issue_number: u64) ->
 }
 
 // Relanza una ejecución de GitHub Actions.
+/// Solicita a GitHub relanzar un workflow existente; no es el mecanismo de validación de GitCraft.
 pub async fn rerun_workflow(token: String, full_name: String, run_id: u64) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
     let resp = client.post(format!("{}/repos/{}/actions/runs/{}/rerun", api, full_name, run_id))
@@ -190,6 +202,7 @@ pub async fn rerun_workflow(token: String, full_name: String, run_id: u64) -> Re
 }
 
 // Publica una nueva Release con su tag.
+/// Publica una Release remota con etiqueta, título y notas.
 pub async fn create_release(token: String, full_name: String, tag: String, name: String, body: String) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
     let resp = client.post(format!("{}/repos/{}/releases", api, full_name))
