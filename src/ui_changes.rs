@@ -1,8 +1,13 @@
+//! Interfaz de ramas y archivos remotos.
+//! Al elegir una rama, muestra sus archivos; al abrir uno, permite editarlo y enviarlo a GitHub.
+//! La lectura de archivos es asíncrona y descarta respuestas de selecciones anteriores.
+
 use crate::app::GitCraftApp;
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
 
 // Dibuja el contenido de la pestaña "Cambios y Ramas" con tabla de archivos de 4 columnas sin cabecera.
+/// Dibuja el selector de ramas, la lista de archivos y el editor opcional.
 pub fn render_changes_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
 
@@ -94,6 +99,7 @@ pub fn render_changes_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::
 }
 
 // Función auxiliar que dibuja la cabecera de carpeta y la tabla de archivos de 4 columnas sin cabecera.
+/// Construye la tabla de archivos y el control para retroceder a la carpeta anterior.
 fn render_files_column(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context, repo_name: &str) {
     let lang = app.language;
     ui.horizontal(|ui| {
