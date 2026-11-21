@@ -282,7 +282,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             ui.horizontal(|ui| {
                 let message_ok = match &preview.action {
                     LocalAction::Commit(message) => {
-                        message == app.local_commit_message.trim()
+                        message.as_str() == app.local_commit_message.trim()
                     }
                     _ => true,
                 };
