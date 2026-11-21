@@ -187,5 +187,6 @@
   "ux_nothing_staged": "No staged files.",
   "ux_diff_preview": "File changes",
   "ux_select_file_hint": "Select a file on the left to view its changes.",
-  "ux_commit_message": "Local commit message"
+  "ux_commit_message": "Local commit message",
+  "ux_stage_before_commit": "Stage at least one file before creating a commit."
 }
