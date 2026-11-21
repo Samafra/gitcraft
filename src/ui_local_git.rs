@@ -1,11 +1,13 @@
-//! Pantalla de Git local: lectura de estado, ramas, historial y diferencias.
+//! Pantalla de Git local: lectura E1 y acciones confirmadas E2.
 //!
 //! Esta vista sólo existe en escritorio y no depende de una sesión GitHub.
-//! Los botones de E1 nunca ejecutan commit, checkout, pull, push ni reset:
-//! delegan consultas al motor local de forma asíncrona para no congelar egui.
+//! E1 conserva sus consultas asíncronas; E2 añade stage, unstage y commit
+//! exclusivamente locales mediante una vista previa seguida de confirmación.
+//! No existe checkout, reset, descarte de archivos, pull ni push.
 
 use crate::app::GitCraftApp;
 use crate::local_git::LocalDiffTarget;
+use crate::local_git_actions::LocalAction;
 use eframe::egui;
 
 /// Muestra el lector de repositorios locales y sus consultas disponibles.
@@ -33,7 +35,9 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         );
         if ui
             .add_enabled(
-                !app.local_loading && !app.local_repo_input.trim().is_empty(),
+                !app.local_loading
+                    && !app.local_action_loading
+                    && !app.local_repo_input.trim().is_empty(),
                 egui::Button::new(app.i18n.t(lang, "local_open")),
             )
             .clicked()
@@ -42,7 +46,9 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         }
         if ui
             .add_enabled(
-                !app.local_loading && app.local_repository.is_some(),
+                !app.local_loading
+                    && !app.local_action_loading
+                    && app.local_repository.is_some(),
                 egui::Button::new(app.i18n.t(lang, "local_refresh")),
             )
             .clicked()
@@ -60,6 +66,9 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
     }
     if let Some(error) = &app.local_error {
         ui.colored_label(egui::Color32::LIGHT_RED, error);
+    }
+    if let Some(notice) = &app.local_action_notice {
+        ui.colored_label(egui::Color32::LIGHT_GREEN, notice);
     }
 
     // Option indica que quizá todavía no se haya abierto ningún repositorio.
@@ -116,7 +125,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                     .show(ui, |ui| {
                         egui::Grid::new("local_files_grid")
                             .striped(true)
-                            .num_columns(2)
+                            .num_columns(4)
                             .show(ui, |ui| {
                                 for file in &repository.status {
                                     ui.monospace(&file.code);
@@ -126,6 +135,71 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                                         name.push_str(previous);
                                     }
                                     ui.label(name);
+                                    // Cada diff muestra un solo archivo: no cambia
+                                    // ni su contenido ni el estado del índice.
+                                    ui.horizontal(|ui| {
+                                        if ui
+                                            .small_button(app.i18n.t(lang, "e2_diff_file"))
+                                            .clicked()
+                                        {
+                                            app.load_local_diff(
+                                                ctx.clone(),
+                                                LocalDiffTarget::File {
+                                                    path: file.path.clone(),
+                                                    staged: false,
+                                                },
+                                            );
+                                        }
+                                        if ui
+                                            .small_button(app.i18n.t(lang, "e2_diff_index"))
+                                            .clicked()
+                                        {
+                                            app.load_local_diff(
+                                                ctx.clone(),
+                                                LocalDiffTarget::File {
+                                                    path: file.path.clone(),
+                                                    staged: true,
+                                                },
+                                            );
+                                        }
+                                    });
+                                    // Sólo se muestran acciones que corresponden al
+                                    // código de estado observado por Git. El motor
+                                    // volverá a comprobar su validez al confirmar.
+                                    let staged = file.code != "??"
+                                        && file.code.as_bytes()[0] != b' ';
+                                    let unstaged = file.code == "??"
+                                        || file.code.as_bytes()[1] != b' ';
+                                    ui.horizontal(|ui| {
+                                        if unstaged && ui
+                                            .add_enabled(
+                                                !app.local_action_loading,
+                                                egui::Button::new(
+                                                    app.i18n.t(lang, "e2_stage"),
+                                                ),
+                                            )
+                                            .clicked()
+                                        {
+                                            app.preview_local_action(
+                                                ctx.clone(),
+                                                LocalAction::Stage(file.path.clone()),
+                                            );
+                                        }
+                                        if staged && ui
+                                            .add_enabled(
+                                                !app.local_action_loading,
+                                                egui::Button::new(
+                                                    app.i18n.t(lang, "e2_unstage"),
+                                                ),
+                                            )
+                                            .clicked()
+                                        {
+                                            app.preview_local_action(
+                                                ctx.clone(),
+                                                LocalAction::Unstage(file.path.clone()),
+                                            );
+                                        }
+                                    });
                                     ui.end_row();
                                 }
                             });
@@ -133,6 +207,85 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             }
         },
     );
+
+    // La creación del commit sólo puede usar cambios ya preparados.
+    // Ningún botón E2 ejecuta una escritura en el primer clic: siempre
+    // se presenta un resumen y se solicita confirmación posterior.
+    ui.group(|ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new(app.i18n.t(lang, "e2_commit_title")).strong());
+            ui.add(
+                egui::TextEdit::singleline(&mut app.local_commit_message)
+                    .desired_width(350.0)
+                    .hint_text(app.i18n.t(lang, "e2_commit_hint")),
+            );
+            if ui
+                .add_enabled(
+                    !app.local_action_loading
+                        && !app.local_commit_message.trim().is_empty(),
+                    egui::Button::new(app.i18n.t(lang, "e2_preview_commit")),
+                )
+                .clicked()
+            {
+                app.preview_local_action(
+                    ctx.clone(),
+                    LocalAction::Commit(app.local_commit_message.trim().to_string()),
+                );
+            }
+        });
+        ui.label(
+            egui::RichText::new(app.i18n.t(lang, "e2_commit_warning"))
+                .weak()
+                .small(),
+        );
+    });
+
+    if app.local_action_loading {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(app.i18n.t(lang, "e2_action_loading"));
+        });
+    }
+
+    // Copiamos el preview para no mantener un préstamo de app mientras
+    // el botón de confirmación modifica su estado.
+    if let Some(preview) = app.local_action_preview.clone() {
+        ui.group(|ui| {
+            ui.heading(app.i18n.t(lang, "e2_confirm_title"));
+            ui.label(&preview.summary);
+            egui::ScrollArea::vertical()
+                .id_salt("local_action_preview_scroll")
+                .max_height(110.0)
+                .show(ui, |ui| {
+                    ui.monospace(&preview.details);
+                });
+            ui.label(
+                egui::RichText::new(app.i18n.t(lang, "e2_confirm_notice"))
+                    .weak()
+                    .small(),
+            );
+            ui.horizontal(|ui| {
+                let message_ok = match &preview.action {
+                    LocalAction::Commit(message) => {
+                        message == app.local_commit_message.trim()
+                    }
+                    _ => true,
+                };
+                if ui
+                    .add_enabled(
+                        message_ok && !app.local_action_loading,
+                        egui::Button::new(app.i18n.t(lang, "e2_confirm")),
+                    )
+                    .clicked()
+                {
+                    app.confirm_local_action(ctx.clone());
+                }
+                if ui.button(app.i18n.t(lang, "e2_cancel")).clicked() {
+                    app.cancel_local_action();
+                }
+            });
+        });
+    }
 
     ui.collapsing(
         format!(
@@ -241,6 +394,18 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             LocalDiffTarget::Staged => app.i18n.t(lang, "local_diff_staged").to_string(),
             LocalDiffTarget::Commit(sha) => {
                 format!("{} {}", app.i18n.t(lang, "local_commit"), sha)
+            }
+            LocalDiffTarget::File { path, staged } => {
+                format!(
+                    "{}: {} ({})",
+                    app.i18n.t(lang, "e2_diff_file"),
+                    path,
+                    if *staged {
+                        app.i18n.t(lang, "e2_diff_index")
+                    } else {
+                        app.i18n.t(lang, "local_diff_unstaged")
+                    }
+                )
             }
         };
         ui.label(egui::RichText::new(label).strong());
