@@ -627,8 +627,14 @@ impl GitCraftApp {
         }
         let permitted = match &request {
             HistoryDetailRequest::Comparison { left, right } => {
-                overview.revisions.iter().any(|rev| rev.sha == *left)
-                    && overview.revisions.iter().any(|rev| rev.sha == *right)
+                overview
+                    .revisions
+                    .iter()
+                    .any(|rev| rev.sha.as_str() == left.as_str())
+                    && overview
+                        .revisions
+                        .iter()
+                        .any(|rev| rev.sha.as_str() == right.as_str())
                     && left != right
             }
             HistoryDetailRequest::Blame(file) => {
