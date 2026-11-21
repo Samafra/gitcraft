@@ -7,7 +7,7 @@
 
 ## Estado de la etapa
 
-**Implementación aplicada y controles automáticos locales superados en macOS (resultado comunicado por el usuario).** El commit de formateo `a601a840a759b674ba3a9cdd6c92ec4dfc0af75d` está verificado en `origin/develop`. Todavía **faltan las pruebas funcionales manuales y las verificaciones en otros sistemas o targets**; por ello E0 no se declara cerrada. El entorno remoto de revisión no ha ejecutado Cargo por sí mismo.
+**Implementación aplicada: controles automáticos y siete comprobaciones funcionales básicas de macOS correctos**, según resultados comunicados por el usuario. El commit de formateo `a601a840a759b674ba3a9cdd6c92ec4dfc0af75d` está verificado en GitHub. **E0 todavía no está cerrada en su totalidad:** quedan pruebas de situaciones excepcionales y verificación de otras plataformas/targets. La revisión remota no ejecuta Cargo ni la interfaz gráfica.
 
 ## Cambios realizados
 
@@ -58,17 +58,29 @@ Además, comunicó que `cargo fmt --all -- --check`, `cargo check --locked`, `ca
 
 **Alcance de esta evidencia:** controles automáticos correctos en el Mac del usuario. No acredita por sí sola pruebas manuales de interfaz ni compatibilidad macOS ARM, Linux, Windows o navegador WASM. El script sólo comprueba WebAssembly si el target está instalado; no consta el resultado específico de ese paso.
 
-## Pruebas manuales pendientes
+## Evidencia funcional macOS — 21/11/2026
 
-1. Inicio, autenticación GitHub y listado de repositorios; reiniciar la app y comprobar que solicita el PAT de nuevo.
-2. Seleccionar repo y rama no predeterminada, actualizar ramas: no cambiar de rama.
-3. Crear rama, verificar que queda seleccionada, abrir un archivo y editarlo en un repositorio de prueba.
-4. Cambiar rápidamente entre repositorios/ramas/carpetas/archivos y comprobar que no se muestran resultados de otra selección.
-5. Desconectar durante una petición, verificar que no reaparece una sesión antigua.
-6. Elegir servidores MCP GitHub y no GitHub, verificar que no reciben PAT por defecto; autorizar manualmente y confirmar que la autorización se revoca al cambiar endpoint.
-7. Simular permisos insuficientes o rate limiting y comprobar que GitHub muestra un error, no una colección vacía.
+El usuario ejecutó GitCraft en su MacBook Pro y comunicó **OK en las siete pruebas**, sin observaciones ni errores:
 
-**No realizar pruebas de edición/merge sobre `main` ni sobre repositorios con datos de producción.** Usar repositorios temporales o de prueba.
+1. Arranque de la aplicación gráfica.
+2. Autenticación GitHub y visualización de repositorios.
+3. Actualización de ramas manteniendo seleccionada `develop`.
+4. Apertura y lectura de archivos.
+5. Desconexión del usuario.
+6. Solicitud de token nuevamente al reiniciar la aplicación.
+7. Permiso MCP inicialmente desactivado y revocado al cambiar de servidor.
+
+Estas comprobaciones fueron realizadas manualmente por el usuario. No equivalen a una auditoría completa de seguridad ni a pruebas de todas las plataformas.
+
+## Pruebas funcionales adicionales pendientes
+
+- **Creación remota de una rama y permanencia de la selección** en un repositorio de prueba, sin tocar `Samafra/gitcraft/main`.
+- **Respuesta obsoleta:** alternar rápidamente entre repositorios/ramas/archivos mientras las consultas siguen en curso y verificar que no se mezclan datos; desconectar durante una petición.
+- **Errores de GitHub 403/429:** contrastar la presentación de errores con un escenario de prueba controlado; los tests automatizados de respuestas HTTP ya se ejecutaron satisfactoriamente en macOS según el usuario.
+- **Credenciales MCP en procesos:** comprobar, con servidor de pruebas local y token ficticio, que los procesos no autorizados no heredan el token. La comprobación visual del consentimiento sí consta como OK.
+- **Otras plataformas:** builds y pruebas manuales de macOS ARM, Windows, Linux y WebAssembly según corresponda; la arquitectura web no tiene las mismas capacidades nativas.
+
+No ejecutar operaciones destructivas ni crear ramas o commits de prueba dentro de la rama estable.
 
 ## Verificación adicional realizada sobre el código fuente
 
@@ -76,7 +88,7 @@ Además, comunicó que `cargo fmt --all -- --check`, `cargo check --locked`, `ca
 - Un comprobador estático de delimitadores (no un compilador Rust) no detectó llaves, paréntesis ni corchetes desparejados en los siete módulos Rust principales afectados.
 - Se verificó en el código el uso de `#[serde(skip)]` para el PAT, la eliminación predeterminada de las variables de entorno del token en MCP y los nuevos tests de errores HTTP.
 - Los tests del servidor HTTP simulado incluyen un límite de espera para no bloquear indefinidamente la validación.
-- **La revisión remota no ha ejecutado Rust ni probado la aplicación gráficamente.** Sí se recibió el resultado satisfactorio de los controles locales del usuario en macOS. Las comprobaciones funcionales de interfaz siguen pendientes.
+- **La revisión remota no ha ejecutado Rust ni probado la aplicación gráficamente.** Sí se recibió el resultado satisfactorio de los controles locales del usuario en macOS. Las siete comprobaciones funcionales básicas fueron confirmadas posteriormente por el usuario; siguen pendientes los casos excepcionales y otros targets.
 
 ## Riesgos y asuntos pendientes fuera del alcance cerrado de E0
 
