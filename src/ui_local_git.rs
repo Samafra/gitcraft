@@ -8,6 +8,7 @@
 use crate::app::GitCraftApp;
 use crate::local_git::LocalDiffTarget;
 use crate::local_git_actions::LocalAction;
+use crate::ui_local_history::render_history_panel;
 use eframe::egui;
 
 /// Muestra el lector de repositorios locales y sus consultas disponibles.
@@ -448,4 +449,8 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             .weak()
             .small(),
     );
+
+    // E3-A es un panel de lectura aparte. Las acciones de staging E2 y su
+    // confirmación siguen independientes y no pueden activarse desde él.
+    render_history_panel(app, ui, ctx);
 }
