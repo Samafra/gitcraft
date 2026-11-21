@@ -54,6 +54,14 @@ El script evita ejecutar en `main`, no fuerza cambios, no ejecuta Actions ni pub
 
 **No realizar pruebas de edición/merge sobre `main` ni sobre repositorios con datos de producción.** Usar repositorios temporales o de prueba.
 
+## Verificación adicional realizada sobre el código fuente
+
+- Se han releído los archivos modificados directamente desde `develop` y comprobado la correspondencia entre los tipos de `AsyncEvent`, sus emisores y sus receptores.
+- Un comprobador estático de delimitadores (no un compilador Rust) no detectó llaves, paréntesis ni corchetes desparejados en los siete módulos Rust principales afectados.
+- Se verificó en el código el uso de `#[serde(skip)]` para el PAT, la eliminación predeterminada de las variables de entorno del token en MCP y los nuevos tests de errores HTTP.
+- Los tests del servidor HTTP simulado incluyen un límite de espera para no bloquear indefinidamente la validación.
+- **No se ha ejecutado ninguna prueba Rust, no se ha compilado ningún target y no se ha probado la interfaz en ejecución**.
+
 ## Riesgos y asuntos pendientes fuera del alcance cerrado de E0
 
 - Revisar e implementar almacenamiento seguro de credenciales nativo si se desea persistencia entre sesiones.
