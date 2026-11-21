@@ -96,6 +96,14 @@ fn current_file_hash(root: &Path, path: &str) -> Result<Option<Vec<u8>>, String>
             if !meta.is_file() {
                 return Err("E2 sólo admite archivos individuales, no carpetas.".into());
             }
+            // Un directorio intermedio podría ser un enlace simbólico.
+            // Comprobar la ruta final impide acceder fuera de la raíz Git.
+            let real_file = location
+                .canonicalize()
+                .map_err(|error| format!("No se puede resolver el archivo: {}", error))?;
+            if !real_file.starts_with(root) {
+                return Err("El archivo está fuera de la raíz Git.".into());
+            }
             run_git(Some(root), &["hash-object", "--no-filters", "--", path])
                 .map(Some)
         }
