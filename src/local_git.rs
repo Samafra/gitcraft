@@ -144,7 +144,9 @@ fn expand_home(input: &str) -> PathBuf {
         let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
         if let Some(home) = home {
             let mut path = PathBuf::from(home);
-            let remainder = value.trim_start_matches('~').trim_start_matches(['/', '\\']);
+            let remainder = value
+                .trim_start_matches('~')
+                .trim_start_matches(|ch| ch == '/' || ch == '\\');
             path.push(remainder);
             return path;
         }
@@ -170,7 +172,7 @@ pub fn inspect_repository(input: &str) -> Result<LocalRepository, String> {
 
     // Se rechazan repositorios bare: E1 necesita un directorio de trabajo.
     let inside = run_git(Some(&directory), &["rev-parse", "--is-inside-work-tree"])?;
-    if inside != b"true\n" && inside != b"true\r\n" {
+    if String::from_utf8_lossy(&inside).trim() != "true" {
         return Err("E1 necesita un repositorio Git con directorio de trabajo.".into());
     }
     let root_bytes = run_git(Some(&directory), &["rev-parse", "--show-toplevel"])?;
@@ -303,7 +305,7 @@ fn parse_commits(bytes: &[u8]) -> Result<Vec<LocalCommit>, String> {
         if fields.len() < 5 {
             return Err("La salida del historial Git es incompleta.".into());
         }
-        let value = |index| String::from_utf8_lossy(fields[index]).into_owned();
+        let value = |index: usize| String::from_utf8_lossy(fields[index]).into_owned();
         commits.push(LocalCommit {
             sha: value(0),
             short_sha: value(1),
