@@ -1,0 +1,6 @@
+#!/bin/sh
+# GitCraft: control obligatorio de formato en pushes LOCALES.
+# La API de GitHub no ejecuta este hook: se requiere la regla AGENTS.md.
+set -eu
+ROOT="$(git rev-parse --show-toplevel)" || exit 1
+exec /bin/sh "$ROOT/scripts/comprobar_formato_rust.sh"

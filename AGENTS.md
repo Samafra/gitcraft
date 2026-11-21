@@ -11,6 +11,41 @@ Estas instrucciones se aplican a todo cambio de código, prueba o documentación
 5. El objetivo funcional es un cliente **Git** comparable a SourceTree. **No implementar Mercurial.**
 6. Las acciones que puedan perder trabajo (reset hard, discard, clean, rebase, force push y similares) deben tener previsualización y confirmación explícita.
 
+## Bloqueo obligatorio de formato y compilación **ANTES** de publicar
+
+**Problema corregido:** no se admite volver a subir archivos Rust sin formato para
+que el usuario encuentre diferencias de Rustfmt después de sincronizar. Ese
+procedimiento desperdicia tiempo y no constituye una validación de entrega.
+
+1. **Antes de cualquier commit o publicación con cambios en `.rs`**, la persona
+   o agente que prepara el código debe trabajar en un entorno que disponga
+   realmente de la toolchain Rust y ejecutar, en este orden:
+   `cargo fmt --all`, `cargo fmt --all -- --check`, `cargo check --locked`,
+   `cargo test --locked` y `cargo clippy --locked --all-targets`.
+   **Todos deben terminar correctamente antes del commit**; no basta con
+   inspeccionar estáticamente la sintaxis ni con aplicar formato manualmente.
+2. Si la herramienta del agente sólo permite escribir en GitHub por API y
+   **no puede ejecutar Rustfmt sobre el contenido definitivo**, queda
+   **prohibido publicar cambios nuevos de código Rust en `develop`**.
+   Preparar una propuesta o un parche para ejecución desde un entorno
+   local que sí tenga Rustfmt. No trasladar el error al usuario pidiéndole
+   que formatee un commit ya publicado.
+3. Única excepción documental al punto anterior: aplicar **literalmente un
+   diff de Rustfmt que el usuario ya ha ejecutado** para corregir formato
+   existente, comprobando que no cambia lógica ni ramas. Esto no cuenta
+   como validación local realizada por el agente.
+4. `scripts/preparar_rust_para_entrega.sh` ejecuta el formateo y los
+   controles automáticos de forma local, **sin commit ni push**. Ejecutarlo
+   **antes de publicar**, nunca como reparación después.
+5. Los ganchos opcionales `.githooks/pre-commit` y
+   `.githooks/pre-push` bloquean commits y pushes **locales** sin
+   `cargo fmt --check`. Se pueden activar de forma voluntaria con
+   `bash scripts/activar_guardas_formato.sh` (no alteran ramas).
+   **Los hooks locales no interceptan la API GitHub** y por sí solos no
+   sustituyen las prohibiciones anteriores.
+6. No utilizar GitHub Actions. Si no hay ejecutor Rust accesible, detener la
+   publicación de código e informar claramente de esa limitación.
+
 ## Norma estricta de comentarios — máxima claridad para principiantes en Rust
 
 **Todo código nuevo o modificado debe estar ampliamente comentado en español, de modo que lo pueda entender una persona sin conocimientos previos de Rust.** La explicación ha de ser didáctica y clara, sin dar por conocidas las particularidades del lenguaje.
