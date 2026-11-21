@@ -7,7 +7,7 @@
 
 ## Estado de la etapa
 
-**Implementación aplicada; validación de compilación y ejecución PENDIENTE.** El entorno que ha realizado esta revisión no contiene `cargo`, `rustc` ni `rustfmt`. No es correcto afirmar que los cambios compilan, que pasan los tests o que todas las plataformas funcionan hasta que se ejecuten las comprobaciones indicadas.
+**Implementación aplicada y controles automáticos locales superados en macOS (resultado comunicado por el usuario).** El commit de formateo `a601a840a759b674ba3a9cdd6c92ec4dfc0af75d` está verificado en `origin/develop`. Todavía **faltan las pruebas funcionales manuales y las verificaciones en otros sistemas o targets**; por ello E0 no se declara cerrada. El entorno remoto de revisión no ha ejecutado Cargo por sí mismo.
 
 ## Cambios realizados
 
@@ -27,7 +27,7 @@
 - Desconectar invalida la sesión pendiente y revoca el permiso MCP.
 - Las respuestas HTTP simuladas 403 y 429 se notifican como errores.
 
-**Estas pruebas están escritas, no ejecutadas.** Los servidores de prueba HTTP sólo escuchan en `127.0.0.1`.
+**Estas pruebas fueron ejecutadas en el Mac del usuario como parte de `cargo test --locked` y el script de validación E0, según la salida comunicada.** No se dispone de un registro completo de las pruebas individuales en el entorno de revisión remota. Los servidores de prueba HTTP sólo escuchan en `127.0.0.1`.
 
 ## Cómo validar en macOS/Linux
 
@@ -41,6 +41,22 @@ bash scripts/validar_e0_local.sh
 Si ya existe una copia local limpia, no es necesario clonar de nuevo: actualizar `develop` por fast-forward y ejecutar el script.
 
 El script evita ejecutar en `main`, no fuerza cambios, no ejecuta Actions ni publica nada. Cargo puede crear artefactos ignorados bajo `target/`. La comprobación de WebAssembly sólo se intenta si `wasm32-unknown-unknown` está instalado. Para Windows hay que ejecutar los comandos equivalentes con Cargo y hacer pruebas manuales específicas.
+
+## Evidencia de validación automática en macOS — 21/11/2026
+
+El usuario ejecutó `scripts/validar_e0_local.sh` en su Mac y comunicó:
+
+```text
+OK: controles locales terminados sin errores; revisar aparte las pruebas manuales.
+## develop...origin/develop
+a601a84 (HEAD -> develop, origin/develop) style: aplicar rustfmt a fuentes Rust (E0)
+```
+
+Además, comunicó que `cargo fmt --all -- --check`, `cargo check --locked`, `cargo test --locked` y `cargo clippy --locked --all-targets` habían finalizado satisfactoriamente. Antes del commit, el usuario comparó los 11 archivos Rust formateados con un árbol temporal generado desde `HEAD` y confirmó que todos eran exclusivamente cambios de Rustfmt.
+
+**Verificación remota independiente:** GitHub confirma que `develop` apunta a `a601a840a759b674ba3a9cdd6c92ec4dfc0af75d`, y que `main` continúa en `c208de70e87c7eabf5e5e1fea5546aa1bae43ef4`. Este registro de validación se añade en un commit documental posterior.
+
+**Alcance de esta evidencia:** controles automáticos correctos en el Mac del usuario. No acredita por sí sola pruebas manuales de interfaz ni compatibilidad macOS ARM, Linux, Windows o navegador WASM. El script sólo comprueba WebAssembly si el target está instalado; no consta el resultado específico de ese paso.
 
 ## Pruebas manuales pendientes
 
@@ -60,7 +76,7 @@ El script evita ejecutar en `main`, no fuerza cambios, no ejecuta Actions ni pub
 - Un comprobador estático de delimitadores (no un compilador Rust) no detectó llaves, paréntesis ni corchetes desparejados en los siete módulos Rust principales afectados.
 - Se verificó en el código el uso de `#[serde(skip)]` para el PAT, la eliminación predeterminada de las variables de entorno del token en MCP y los nuevos tests de errores HTTP.
 - Los tests del servidor HTTP simulado incluyen un límite de espera para no bloquear indefinidamente la validación.
-- **No se ha ejecutado ninguna prueba Rust, no se ha compilado ningún target y no se ha probado la interfaz en ejecución**.
+- **La revisión remota no ha ejecutado Rust ni probado la aplicación gráficamente.** Sí se recibió el resultado satisfactorio de los controles locales del usuario en macOS. Las comprobaciones funcionales de interfaz siguen pendientes.
 
 ## Riesgos y asuntos pendientes fuera del alcance cerrado de E0
 
