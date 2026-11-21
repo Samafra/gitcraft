@@ -59,7 +59,7 @@ fases posteriores y requieren controles específicos.
 
 ## Archivos
 
-- src/local_git_refs.rs: motor seguro, tipos, vista previa y ocho tests.
+- src/local_git_refs.rs: motor seguro, tipos, vista previa y nueve tests.
 - src/ui_local_history.rs: formulario, resumen y doble confirmación E3-B.
 - src/app.rs: eventos asíncronos, comprobaciones de identidad y recarga.
 - src/ui_local_git.rs: guardas frente a escrituras simultáneas y cambio de ruta.
@@ -196,7 +196,7 @@ git log -1 --oneline
 | Windows | Pendiente; comprobar semántica de hooks y rutas |
 | WebAssembly | Sin motor Git local; compilación pendiente |
 
-**Cierre E3-B:** sólo tras Rustfmt, check, los ocho tests E3-B,
+**Cierre E3-B:** sólo tras Rustfmt, check, los nueve tests E3-B,
 regresiones, Clippy y pruebas manuales satisfactorias sobre un
 repositorio temporal de macOS Intel. E3 completo continúa abierto.
 
