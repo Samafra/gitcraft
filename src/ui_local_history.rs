@@ -366,7 +366,7 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                         );
                     });
             }
-    });
+        });
 }
 
 /// E3-B: presenta una creación de referencia en dos pasos obligatorios.
