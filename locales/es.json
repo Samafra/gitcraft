@@ -68,7 +68,7 @@
   "col_act_action": "Acción",
   "local_title": "Git local · Explorador de repositorios",
   "tab_local_git": "💻 Git local",
-  "local_readonly_note": "E1: solo lectura. Sin conexión a GitHub, sin commit, checkout, push ni cambios en archivos.",
+  "local_readonly_note": "E2: consulta Git local y prepara archivos o commits sólo tras vista previa y confirmación. Sin push ni descarte de cambios.",
   "local_path_hint": "Ruta del repositorio, por ejemplo ~/Projects/gitcraft",
   "local_open": "📂 Abrir",
   "local_refresh": "🔄 Actualizar",
@@ -106,5 +106,8 @@
   "e2_confirm_title": "Confirmar operación Git local",
   "e2_confirm_notice": "Revisa los archivos y la rama. Se volverá a comprobar el estado antes de escribir. Si cambió, la operación será rechazada.",
   "e2_confirm": "Confirmar operación",
-  "e2_cancel": "Cancelar sin cambios"
+  "e2_cancel": "Cancelar sin cambios",
+  "e2_notice_staged": "Archivo preparado",
+  "e2_notice_unstaged": "Retirado del índice sin borrar el archivo",
+  "e2_notice_committed": "Commit local creado; no se ha enviado a ningún remoto."
 }
