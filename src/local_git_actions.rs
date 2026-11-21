@@ -206,7 +206,10 @@ pub fn preview_action(root: &Path, action: LocalAction) -> Result<LocalActionPre
                 || message.len() > 500
                 || message.chars().any(|ch| ch.is_control())
             {
-                return Err("El mensaje de commit debe tener entre 1 y 500 caracteres, sin saltos de línea.".into());
+                return Err(
+                    "El mensaje de commit debe tener entre 1 y 500 caracteres, sin saltos de línea."
+                        .into(),
+                );
             }
             if repository.head == "(HEAD separado)" {
                 return Err("No se crea un commit desde HEAD separado.".into());
