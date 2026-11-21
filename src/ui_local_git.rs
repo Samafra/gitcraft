@@ -28,11 +28,20 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
     // La ruta es texto: se entrega como un argumento independiente a Git.
     // No se ejecuta un shell ni se guarda esta ruta en las preferencias.
     ui.horizontal_wrapped(|ui| {
-        ui.add(
-            egui::TextEdit::singleline(&mut app.local_repo_input)
-                .desired_width(420.0)
-                .hint_text(app.i18n.t(lang, "local_path_hint")),
-        );
+        // Si se escribe otra ruta, se revoca la confirmación que estaba
+        // asociada al repositorio anterior. Nunca confirmar contra un destino
+        // distinto del que el usuario ve en la barra de ubicación.
+        let path_changed = ui
+            .add_enabled(
+                !app.local_action_loading,
+                egui::TextEdit::singleline(&mut app.local_repo_input)
+                    .desired_width(420.0)
+                    .hint_text(app.i18n.t(lang, "local_path_hint")),
+            )
+            .changed();
+        if path_changed {
+            app.cancel_local_action();
+        }
         if ui
             .add_enabled(
                 !app.local_loading
@@ -79,6 +88,11 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         ui.label(app.i18n.t(lang, "local_no_repository"));
         return;
     };
+
+    // Hasta volver a pulsar Abrir, una ruta editada aún no es el
+    // repositorio que está cargado. No permitir escrituras por error.
+    let path_matches = app.local_repo_input.as_str()
+        == repository.root.to_string_lossy().as_ref();
 
     ui.separator();
     ui.label(format!(
@@ -173,7 +187,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                                     ui.horizontal(|ui| {
                                         if unstaged && ui
                                             .add_enabled(
-                                                !app.local_action_loading,
+                                                path_matches && !app.local_action_loading,
                                                 egui::Button::new(
                                                     app.i18n.t(lang, "e2_stage"),
                                                 ),
@@ -187,7 +201,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                                         }
                                         if staged && ui
                                             .add_enabled(
-                                                !app.local_action_loading,
+                                                path_matches && !app.local_action_loading,
                                                 egui::Button::new(
                                                     app.i18n.t(lang, "e2_unstage"),
                                                 ),
@@ -221,7 +235,8 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             );
             if ui
                 .add_enabled(
-                    !app.local_action_loading
+                    path_matches
+                        && !app.local_action_loading
                         && !app.local_commit_message.trim().is_empty(),
                     egui::Button::new(app.i18n.t(lang, "e2_preview_commit")),
                 )
@@ -273,7 +288,7 @@ pub fn render_local_git_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                 };
                 if ui
                     .add_enabled(
-                        message_ok && !app.local_action_loading,
+                        message_ok && path_matches && !app.local_action_loading,
                         egui::Button::new(app.i18n.t(lang, "e2_confirm")),
                     )
                     .clicked()
