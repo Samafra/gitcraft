@@ -364,7 +364,7 @@ pub fn read_diff(root: &Path, target: &LocalDiffTarget) -> Result<String, String
                     "--no-textconv",
                     "--no-color",
                     "--format=medium",
-                    sha,
+                    sha.as_str(),
                     "--",
                 ],
             )?
@@ -442,6 +442,9 @@ mod tests {
             command
                 .arg("-c")
                 .arg("core.fsmonitor=false")
+                // No ejecutar hooks globales del usuario al crear commits ficticios.
+                .arg("-c")
+                .arg("core.hooksPath=.git/gitcraft-e1-hooks-disabled")
                 .arg("-C")
                 .arg(&self.root)
                 .args(args);
