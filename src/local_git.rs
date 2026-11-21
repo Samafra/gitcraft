@@ -585,8 +585,11 @@ mod tests {
         configure_git_environment(&mut command);
         let output = command.output().expect("Git disponible");
         assert!(output.status.success());
-        assert!(String::from_utf8_lossy(&output.stdout)
-            .contains(fixture.root.to_string_lossy().as_ref()));
+        // macOS puede representar /var como /private/var: comparar rutas
+        // normalizadas evita confundir un enlace simbólico con otro repositorio.
+        let reported = String::from_utf8_lossy(&output.stdout);
+        let root = PathBuf::from(reported.trim());
+        assert_eq!(root.canonicalize().unwrap(), fixture.root.canonicalize().unwrap());
     }
 
     /// Una carpeta que no es Git debe devolver error y no inicializarse.
