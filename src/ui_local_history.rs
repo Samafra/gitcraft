@@ -111,8 +111,12 @@ fn revision_label(revisions: &[HistoryRevision], sha: &str) -> String {
 /// La interfaz utiliza valores de estado de GitCraft que viven sólo en RAM.
 pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
+    // Convertimos la traducción en una cadena propia antes de abrir el panel.
+    // Así se termina el préstamo inmutable de app.i18n y la clausura puede
+    // modificar app al pulsar Actualizar, sin infringir las reglas de Rust.
+    let title = app.i18n.t(lang, "e3_title").to_owned();
     ui.separator();
-    ui.collapsing(app.i18n.t(lang, "e3_title"), |ui| {
+    ui.collapsing(title, |ui| {
         ui.label(
             egui::RichText::new(app.i18n.t(lang, "e3_readonly_note"))
                 .weak()
