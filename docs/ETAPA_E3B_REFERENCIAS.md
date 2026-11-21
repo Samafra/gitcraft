@@ -32,12 +32,18 @@ fases posteriores y requieren controles específicos.
   HEAD, nombre simbólico de la rama activa, índice, estado de archivos,
   ramas locales y etiquetas.
 - Antes de crear la referencia se comprueba de nuevo esta fotografía.
-  Cualquier cambio hace fallar la confirmación.
+  Además, E3-B calcula una huella de contenido de archivos modificados y
+  no seguidos, para detectar ediciones que no alteran el código Git status.
+  Cualquier diferencia hace fallar la confirmación.
 - Los destinos se eligen de los SHA completos disponibles en el historial
   E3-A; Git confirma que el objeto existe y es un commit.
 - Git check-ref-format valida nombres. Los nombres que comienzan con
   guion, valores con caracteres de control y rutas Git mal formadas
   se rechazan antes de mostrar la confirmación.
+- Los enlaces simbólicos se comprueban sin abrir su destino; los archivos
+  normales deben estar dentro de la raíz antes de calcular su hash.
+- Se rechazan rutas que no sean UTF-8. En repositorios con muchos archivos
+  modificados o no seguidos, calcular sus huellas puede ser más lento.
 - Git branch y git tag se invocan **sin opciones force**, nunca sobrescriben
   una referencia existente y no cambian la rama activa.
 - Se usa Git CLI con argumentos independientes sin ejecutar shell.
@@ -59,7 +65,7 @@ fases posteriores y requieren controles específicos.
 
 ## Archivos
 
-- src/local_git_refs.rs: motor seguro, tipos, vista previa y nueve tests.
+- src/local_git_refs.rs: motor seguro, tipos, vista previa y once tests.
 - src/ui_local_history.rs: formulario, resumen y doble confirmación E3-B.
 - src/app.rs: eventos asíncronos, comprobaciones de identidad y recarga.
 - src/ui_local_git.rs: guardas frente a escrituras simultáneas y cambio de ruta.
@@ -196,7 +202,7 @@ git log -1 --oneline
 | Windows | Pendiente; comprobar semántica de hooks y rutas |
 | WebAssembly | Sin motor Git local; compilación pendiente |
 
-**Cierre E3-B:** sólo tras Rustfmt, check, los nueve tests E3-B,
+**Cierre E3-B:** sólo tras Rustfmt, check, los once tests E3-B,
 regresiones, Clippy y pruebas manuales satisfactorias sobre un
 repositorio temporal de macOS Intel. E3 completo continúa abierto.
 
