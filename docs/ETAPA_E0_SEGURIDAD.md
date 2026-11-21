@@ -72,6 +72,17 @@ El usuario ejecutó GitCraft en su MacBook Pro y comunicó **OK en las siete pru
 
 Estas comprobaciones fueron realizadas manualmente por el usuario. No equivalen a una auditoría completa de seguridad ni a pruebas de todas las plataformas.
 
+## Validación excepcional preparada — procesos MCP con credenciales ficticias
+
+Se han incorporado dos tests de proceso real en `src/mcp_client.rs`. Ejecutan el programa local `env` con valores de prueba (`E0_DUMMY_...`), sin transmitir ni imprimir el token real, y verifican el aislamiento de `GITHUB_PERSONAL_ACCESS_TOKEN`, `GITHUB_TOKEN` y `GH_TOKEN`.
+
+- `no_autorizado_no_hereda_credenciales_github`: un proceso no autorizado no debe recibir las variables.
+- `autorizado_recibe_solo_token_ficticio`: un proceso autorizado recibe únicamente el token ficticio por las variables previstas.
+
+Se ha extraído la configuración de variables de entorno a `configure_mcp_github_environment`, que utiliza el cliente real. **Estos nuevos tests todavía no se han ejecutado en el Mac del usuario y no forman parte de las siete pruebas manuales ya comunicadas.**
+
+Los pasos completos para ejecutarlos, probar cambios rápidos de repositorio, crear una rama exclusivamente de prueba y controlar 403/429 están documentados en [Guía de pruebas excepcionales E0](PRUEBAS_EXCEPCIONALES_E0.md).
+
 ## Pruebas funcionales adicionales pendientes
 
 - **Creación remota de una rama y permanencia de la selección** en un repositorio de prueba, sin tocar `Samafra/gitcraft/main`.
