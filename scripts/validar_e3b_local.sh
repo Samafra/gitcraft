@@ -21,8 +21,8 @@ if [[ "$(git branch --show-current)" != "develop" ]]; then
     echo "ERROR: las pruebas E3-B sólo se ejecutan sobre develop."
     exit 1
 fi
-if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "ERROR: existen cambios locales seguidos; revisarlos antes de validar."
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+    echo "ERROR: existen archivos modificados o no seguidos; revisarlos antes de validar."
     exit 1
 fi
 
@@ -72,8 +72,8 @@ if [[ "$(git rev-parse HEAD)" != "$START_HEAD" ]]; then
     echo "ERROR: HEAD ha cambiado durante la validación."
     FAILURES=$((FAILURES + 1))
 fi
-if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo "ERROR: el árbol de trabajo o índice de GitCraft ha cambiado."
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+    echo "ERROR: el árbol de trabajo de GitCraft ha dejado de estar limpio."
     FAILURES=$((FAILURES + 1))
 fi
 
