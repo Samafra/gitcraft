@@ -189,10 +189,7 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             ui.horizontal_wrapped(|ui| {
                 ui.label(app.i18n.t(lang, "e3_base"));
                 egui::ComboBox::from_id_salt("e3_compare_base")
-                    .selected_text(revision_label(
-                        &overview.revisions,
-                        &app.history.base_sha,
-                    ))
+                    .selected_text(revision_label(&overview.revisions, &app.history.base_sha))
                     .width(250.0)
                     .show_ui(ui, |ui| {
                         for revision in &overview.revisions {
@@ -207,10 +204,7 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             ui.horizontal_wrapped(|ui| {
                 ui.label(app.i18n.t(lang, "e3_target"));
                 egui::ComboBox::from_id_salt("e3_compare_target")
-                    .selected_text(revision_label(
-                        &overview.revisions,
-                        &app.history.target_sha,
-                    ))
+                    .selected_text(revision_label(&overview.revisions, &app.history.target_sha))
                     .width(250.0)
                     .show_ui(ui, |ui| {
                         for revision in &overview.revisions {
@@ -251,11 +245,7 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
                     .width(320.0)
                     .show_ui(ui, |ui| {
                         for path in &overview.tracked_files {
-                            ui.selectable_value(
-                                &mut app.history.selected_file,
-                                path.clone(),
-                                path,
-                            );
+                            ui.selectable_value(&mut app.history.selected_file, path.clone(), path);
                         }
                     });
                 if ui
@@ -279,7 +269,11 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
         // Estas listas son información de recuperación. No muestran
         // controles para aplicar stash o reescribir referencias.
         ui.collapsing(
-            format!("{} ({})", app.i18n.t(lang, "e3_reflog"), overview.reflog.len()),
+            format!(
+                "{} ({})",
+                app.i18n.t(lang, "e3_reflog"),
+                overview.reflog.len()
+            ),
             |ui| {
                 draw_lines(ui, "e3_reflog_scroll", &overview.reflog);
             },
@@ -291,7 +285,11 @@ pub fn render_history_panel(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             },
         );
         ui.collapsing(
-            format!("{} ({})", app.i18n.t(lang, "e3_stash"), overview.stash.len()),
+            format!(
+                "{} ({})",
+                app.i18n.t(lang, "e3_stash"),
+                overview.stash.len()
+            ),
             |ui| {
                 draw_lines(ui, "e3_stash_scroll", &overview.stash);
             },
@@ -340,7 +338,6 @@ fn draw_lines(ui: &mut egui::Ui, id: &str, entries: &[String]) {
             }
         });
 }
-
 
 #[cfg(test)]
 mod tests {

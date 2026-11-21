@@ -68,7 +68,10 @@ fn trim_result(bytes: &[u8]) -> String {
 /// Git incluye el hash completo, el hash corto y el asunto de cada commit.
 fn parse_revisions(bytes: &[u8]) -> Result<Vec<HistoryRevision>, String> {
     let mut revisions = Vec::new();
-    for line in bytes.split(|byte| *byte == b'\n').filter(|line| !line.is_empty()) {
+    for line in bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
         let parts: Vec<&[u8]> = line.split(|byte| *byte == 0).collect();
         if parts.len() != 3 {
             return Err("El historial Git tiene un formato inesperado.".into());
@@ -437,7 +440,10 @@ mod tests {
         fixture.git(&["stash", "push", "-m", "Reserva E3"]);
         let before = fixture.git(&["status", "--porcelain"]);
         let history = inspect_history(&fixture.root).unwrap();
-        assert!(history.stash.iter().any(|entry| entry.contains("Reserva E3")));
+        assert!(history
+            .stash
+            .iter()
+            .any(|entry| entry.contains("Reserva E3")));
         assert_eq!(fixture.git(&["status", "--porcelain"]), before);
     }
 }

@@ -20,11 +20,7 @@ use crate::local_git_actions::{
 };
 // E3-A recopila historial y detalles mediante consultas Git sin escritura.
 #[cfg(not(target_arch = "wasm32"))]
-use crate::local_git_history::{
-    blame_file, compare_commits, inspect_history, GitHistoryOverview,
-};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::ui_local_history::{HistoryDetailRequest, HistoryUiState};
+use crate::local_git_history::{blame_file, compare_commits, inspect_history, GitHistoryOverview};
 use crate::mcp_client::{mcp_call_tool, mcp_discover_tools, McpTool, McpTransport};
 use crate::repo_ops::{
     commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content,
@@ -33,6 +29,8 @@ use crate::repo_ops::{
 use crate::ui_changes::render_changes_tab;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::ui_local_git::render_local_git_tab;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::ui_local_history::{HistoryDetailRequest, HistoryUiState};
 use crate::ui_manage::{
     render_actions_tab, render_issues_tab, render_prs_tab, render_releases_tab,
 };
@@ -607,11 +605,7 @@ impl GitCraftApp {
     /// a comprobar su pertenencia a la instantánea en memoria antes de pasar
     /// la petición al motor, evitando entradas obsoletas o manipuladas.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn load_advanced_detail(
-        &mut self,
-        ctx: egui::Context,
-        request: HistoryDetailRequest,
-    ) {
+    pub fn load_advanced_detail(&mut self, ctx: egui::Context, request: HistoryDetailRequest) {
         let Some(repository) = &self.local_repository else {
             return;
         };

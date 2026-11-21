@@ -467,5 +467,4 @@ fn render_local_git_content(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui
             .weak()
             .small(),
     );
-
 }
