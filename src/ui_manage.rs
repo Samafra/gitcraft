@@ -50,7 +50,9 @@ pub fn render_prs_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Cont
             app.trigger_create_pr(ctx.clone());
         }
         if ui.button(app.i18n.t(lang, "refresh_list_btn")).clicked() {
-            app.load_branches_and_root(ctx.clone());
+            // Refrescamos PRs y ramas sin cambiar la rama activa.
+            app.refresh_branches(ctx.clone());
+            app.load_management(ctx.clone());
         }
     });
     ui.separator();
