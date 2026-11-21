@@ -30,16 +30,11 @@ use crate::repo_ops::{
     commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content,
     GitBranch, RepoEntry,
 };
-use crate::ui_changes::render_changes_tab;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::ui_local_git::render_local_git_tab;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::ui_local_history::{HistoryDetailRequest, HistoryUiState};
-use crate::ui_manage::{
-    render_actions_tab, render_issues_tab, render_prs_tab, render_releases_tab,
-};
-use crate::ui_mcp::render_mcp_ui;
-use crate::ui_repos::render_repos_tab;
+use crate::ui_shell::render_app_shell;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::ui_shell::WorkspacePane;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -245,6 +240,10 @@ pub struct GitCraftApp {
     #[cfg(not(target_arch = "wasm32"))]
     #[serde(skip)]
     pub history: HistoryUiState,
+    // La navegación Git al estilo SourceTree no se persiste entre sesiones.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub workspace_pane: WorkspacePane,
     // Identificadores de las peticiones más recientes; pertenecen sólo a esta sesión.
     #[serde(skip)]
     pub request_generation: u64,
@@ -274,9 +273,13 @@ impl Default for GitCraftApp {
         let (tx, rx) = channel();
         Self {
             language: Language::Es,
+            // Abrir directamente en Git local sin solicitar login de GitHub.
+            #[cfg(not(target_arch = "wasm32"))]
+            active_tab: ActiveTab::LocalGit,
+            #[cfg(target_arch = "wasm32")]
             active_tab: ActiveTab::Repositories,
-            dark_mode: true,
-            show_mcp_sidebar: true,
+            dark_mode: false,
+            show_mcp_sidebar: false,
             saved_token: String::new(),
             i18n: I18nManager::default(),
             is_loading: false,
@@ -342,6 +345,8 @@ impl Default for GitCraftApp {
             local_action_generation: 0,
             #[cfg(not(target_arch = "wasm32"))]
             history: HistoryUiState::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            workspace_pane: WorkspacePane::default(),
             request_generation: 0,
             auth_generation: 0,
             branches_request: None,
@@ -395,12 +400,42 @@ impl GitCraftApp {
         app
     }
     /// Ajusta colores claros u oscuros de todos los controles de la aplicación.
-    fn apply_theme(&self, ctx: &egui::Context) {
-        ctx.set_visuals(if self.dark_mode {
+    pub(crate) fn apply_theme(&self, ctx: &egui::Context) {
+        // Ambos temas mantienen contraste de texto alto; no se utilizan
+        // colores pálidos sobre fondos similares para información importante.
+        let mut visuals = if self.dark_mode {
             egui::Visuals::dark()
         } else {
             egui::Visuals::light()
-        });
+        };
+        if self.dark_mode {
+            visuals.override_text_color = Some(egui::Color32::from_rgb(238, 241, 247));
+            visuals.panel_fill = egui::Color32::from_rgb(27, 33, 43);
+            visuals.window_fill = egui::Color32::from_rgb(32, 38, 49);
+            visuals.extreme_bg_color = egui::Color32::from_rgb(21, 26, 34);
+            visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(45, 53, 66);
+            visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(60, 72, 91);
+            visuals.widgets.active.bg_fill = egui::Color32::from_rgb(55, 86, 132);
+            visuals.selection.bg_fill = egui::Color32::from_rgb(56, 96, 151);
+            visuals.selection.stroke.color = egui::Color32::WHITE;
+        } else {
+            visuals.override_text_color = Some(egui::Color32::from_rgb(30, 40, 56));
+            visuals.panel_fill = egui::Color32::from_rgb(244, 247, 251);
+            visuals.window_fill = egui::Color32::WHITE;
+            visuals.extreme_bg_color = egui::Color32::WHITE;
+            visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(231, 237, 245);
+            visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(211, 226, 246);
+            visuals.widgets.active.bg_fill = egui::Color32::from_rgb(187, 211, 242);
+            visuals.selection.bg_fill = egui::Color32::from_rgb(178, 207, 244);
+            visuals.selection.stroke.color = egui::Color32::from_rgb(18, 48, 93);
+        }
+        ctx.set_visuals(visuals);
+
+        // Un espaciado uniforme facilita localizar grupos y botones.
+        let mut style = (*ctx.style()).clone();
+        style.spacing.item_spacing = egui::vec2(8.0, 7.0);
+        style.spacing.button_padding = egui::vec2(11.0, 6.0);
+        ctx.set_style(style);
     }
     /// Genera un marcador único para una nueva petición a GitHub.
     /// El contador se incrementa para que una respuesta anterior nunca suplante a la última.
@@ -1425,144 +1460,9 @@ impl eframe::App for GitCraftApp {
             }
         }
 
-        let lang = self.language;
-        egui::TopBottomPanel::top("top_nav").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("🦀 GitCraft");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    egui::ComboBox::from_id_salt("lang")
-                        .selected_text(lang.label())
-                        .show_ui(ui, |ui| {
-                            for l in Language::all() {
-                                ui.selectable_value(&mut self.language, *l, l.label());
-                            }
-                        });
-                    if ui.button(if self.dark_mode { "☀" } else { "🌙" }).clicked() {
-                        self.dark_mode = !self.dark_mode;
-                        self.apply_theme(ctx);
-                    }
-                    if ui
-                        .selectable_label(self.show_mcp_sidebar, "🤖 MCP")
-                        .clicked()
-                    {
-                        self.show_mcp_sidebar = !self.show_mcp_sidebar;
-                    }
-                });
-            });
-            ui.horizontal_wrapped(|ui| {
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::Repositories,
-                    self.i18n.t(lang, "tab_repos"),
-                );
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::LocalGit,
-                    self.i18n.t(lang, "tab_local_git"),
-                );
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::Changes,
-                    self.i18n.t(lang, "tab_changes"),
-                );
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::PullRequests,
-                    self.i18n.t(lang, "tab_prs"),
-                );
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::Issues,
-                    self.i18n.t(lang, "tab_issues"),
-                );
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::Actions,
-                    self.i18n.t(lang, "tab_actions"),
-                );
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::Releases,
-                    self.i18n.t(lang, "tab_releases"),
-                );
-                ui.selectable_value(
-                    &mut self.active_tab,
-                    ActiveTab::Mcp,
-                    self.i18n.t(lang, "tab_mcp"),
-                );
-            });
-        });
-
-        egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if let Some(r) = &self.selected_repo {
-                    ui.label(format!(
-                        "{} {} ({})",
-                        self.i18n.t(lang, "active_repo_label"),
-                        r.full_name,
-                        self.current_branch
-                    ));
-                }
-                if let Some((msg, is_err)) = &self.status_notice {
-                    ui.colored_label(
-                        if *is_err {
-                            egui::Color32::LIGHT_RED
-                        } else {
-                            egui::Color32::LIGHT_GREEN
-                        },
-                        msg,
-                    );
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if let Some(u) = &self.user {
-                        ui.colored_label(egui::Color32::LIGHT_GREEN, format!("@{} ", u.login));
-                    }
-                });
-            });
-        });
-
-        if self.show_mcp_sidebar {
-            egui::SidePanel::right("mcp_panel")
-                .default_width(250.0)
-                .show(ctx, |ui| {
-                    render_mcp_ui(self, ui, ctx);
-                });
-        }
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // Git local no necesita login, ni siquiera cuando GitHub está desconectado.
-            // En Web se muestra una explicación de que los procesos Git son nativos.
-            if self.user.is_none() && self.active_tab != ActiveTab::LocalGit {
-                ui.heading(self.i18n.t(lang, "welcome_title"));
-                ui.label(self.i18n.t(lang, "local_without_github_hint"));
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.saved_token)
-                            .password(true)
-                            .hint_text("ghp_xxxx"),
-                    );
-                    if ui.button(self.i18n.t(lang, "auth_connect_btn")).clicked() {
-                        self.trigger_github_sync(ctx.clone());
-                    }
-                });
-                return;
-            }
-            match self.active_tab {
-                ActiveTab::Repositories => render_repos_tab(self, ui, ctx),
-                ActiveTab::LocalGit => {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    render_local_git_tab(self, ui, ctx);
-                    #[cfg(target_arch = "wasm32")]
-                    ui.label(self.i18n.t(lang, "local_web_unavailable"));
-                }
-                ActiveTab::Changes => render_changes_tab(self, ui, ctx),
-                ActiveTab::PullRequests => render_prs_tab(self, ui, ctx),
-                ActiveTab::Issues => render_issues_tab(self, ui, ctx),
-                ActiveTab::Actions => render_actions_tab(self, ui, ctx),
-                ActiveTab::Releases => render_releases_tab(self, ui, ctx),
-                ActiveTab::Mcp => render_mcp_ui(self, ui, ctx),
-            }
-        });
+        // El nuevo shell conserva las peticiones Git/GitHub anteriores.
+        // Sólo cambia cómo se presentan las opciones en la ventana.
+        render_app_shell(self, ctx);
     }
 }
 
