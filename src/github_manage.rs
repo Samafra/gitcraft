@@ -231,10 +231,25 @@ mod tests {
             body,
         );
         let handle = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("petición de prueba");
-            let mut buffer = [0_u8; 1024];
-            let _ = stream.read(&mut buffer);
-            stream.write_all(response.as_bytes()).expect("respuesta de prueba");
+            // Un servidor de prueba no debe quedar bloqueado indefinidamente en accept().
+            // Esperamos como máximo cinco segundos por una petición HTTP local.
+            listener.set_nonblocking(true).expect("servidor no bloqueante");
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            loop {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let mut buffer = [0_u8; 1024];
+                        let _ = stream.read(&mut buffer);
+                        stream.write_all(response.as_bytes()).expect("respuesta de prueba");
+                        break;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+                        && std::time::Instant::now() < deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
+                    Err(error) => panic!("no llegó la petición HTTP de prueba: {}", error),
+                }
+            }
         });
         (format!("http://{}", address), handle)
     }
