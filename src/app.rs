@@ -1083,14 +1083,23 @@ impl eframe::App for GitCraftApp {
                             self.local_diff_text.clear();
                             self.local_repository = Some(repository);
                             self.local_action_notice = Some(match action {
-                                LocalAction::Stage(path) => format!("Archivo preparado: {}", path),
+                                LocalAction::Stage(path) => {
+                                    format!(
+                                        "{}: {}",
+                                        self.i18n.t(self.language, "e2_notice_staged"),
+                                        path
+                                    )
+                                }
                                 LocalAction::Unstage(path) => {
-                                    format!("Retirado del índice, sin borrar el archivo: {}", path)
+                                    format!(
+                                        "{}: {}",
+                                        self.i18n.t(self.language, "e2_notice_unstaged"),
+                                        path
+                                    )
                                 }
                                 LocalAction::Commit(_) => {
                                     self.local_commit_message.clear();
-                                    "Commit local creado; no se ha enviado a ningún remoto."
-                                        .into()
+                                    self.i18n.t(self.language, "e2_notice_committed").to_string()
                                 }
                             });
                             self.local_error = None;
