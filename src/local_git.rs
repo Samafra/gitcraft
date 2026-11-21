@@ -438,12 +438,16 @@ mod tests {
         /// Ejecuta operaciones de preparación únicamente dentro del fixture.
         /// El motor real de E1 nunca utiliza esta función ni escribe archivos.
         fn git(&self, args: &[&str]) -> Vec<u8> {
-            let result = Command::new("git")
+            let mut command = Command::new("git");
+            command
+                .arg("-c")
+                .arg("core.fsmonitor=false")
                 .arg("-C")
                 .arg(&self.root)
-                .args(args)
-                .output()
-                .expect("Git instalado para las pruebas");
+                .args(args);
+            // Incluso en los fixtures se evita heredar GIT_DIR del usuario.
+            configure_git_environment(&mut command);
+            let result = command.output().expect("Git instalado para las pruebas");
             assert!(
                 result.status.success(),
                 "{}",
