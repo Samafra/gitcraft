@@ -541,7 +541,7 @@ impl GitCraftApp {
             return;
         }
         if let LocalAction::Commit(message) = &preview.action {
-            if message != self.local_commit_message.trim() {
+            if message.as_str() != self.local_commit_message.trim() {
                 self.local_error = Some("El mensaje cambió; genera otra vista previa.".into());
                 return;
             }
