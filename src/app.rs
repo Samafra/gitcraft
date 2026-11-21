@@ -11,12 +11,17 @@ use crate::github_manage::{
     rerun_workflow, RepoManagementData,
 };
 use crate::i18n::{I18nManager, Language};
+// Las funciones de Git local sólo se compilan en escritorio (macOS/Linux/Windows).
+#[cfg(not(target_arch = "wasm32"))]
+use crate::local_git::{inspect_repository, read_diff, LocalDiffTarget, LocalRepository};
 use crate::mcp_client::{mcp_call_tool, mcp_discover_tools, McpTool, McpTransport};
 use crate::repo_ops::{
     commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content,
     GitBranch, RepoEntry,
 };
 use crate::ui_changes::render_changes_tab;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::ui_local_git::render_local_git_tab;
 use crate::ui_manage::{
     render_actions_tab, render_issues_tab, render_prs_tab, render_releases_tab,
 };
@@ -29,6 +34,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActiveTab {
     Repositories,
+    // Git local funciona incluso sin sesión de GitHub.
+    LocalGit,
     Changes,
     PullRequests,
     Issues,
@@ -73,6 +80,11 @@ pub enum AsyncEvent {
     MgmtActionDone(String, Result<(), String>),
     McpToolsLoaded(Result<Vec<McpTool>, String>),
     McpCallResult(Result<String, String>),
+    // El identificador permite descartar una lectura local obsoleta.
+    #[cfg(not(target_arch = "wasm32"))]
+    LocalRepositoryLoaded(u64, Result<LocalRepository, String>),
+    #[cfg(not(target_arch = "wasm32"))]
+    LocalDiffLoaded(u64, Result<String, String>),
 }
 
 /// Estado general de GitCraft: preferencias, sesión y datos que utiliza la interfaz.
@@ -153,6 +165,35 @@ pub struct GitCraftApp {
     pub mcp_tool_args: String,
     #[serde(skip)]
     pub mcp_last_output: String,
+    // E1: todos estos datos locales son temporales, no se guardan con serde.
+    // cfg impide incluir funciones de sistema de archivos en la versión Web.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_repo_input: String,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_repository: Option<LocalRepository>,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_loading: bool,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_error: Option<String>,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_diff_target: Option<LocalDiffTarget>,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_diff_text: String,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    pub local_diff_loading: bool,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    local_generation: u64,
+    #[cfg(not(target_arch = "wasm32"))]
+    #[serde(skip)]
+    local_diff_generation: u64,
     // Identificadores de las peticiones más recientes; pertenecen sólo a esta sesión.
     #[serde(skip)]
     pub request_generation: u64,
@@ -220,6 +261,24 @@ impl Default for GitCraftApp {
             mcp_selected_tool: String::new(),
             mcp_tool_args: "{}".into(),
             mcp_last_output: String::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            local_repo_input: String::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            local_repository: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_loading: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_error: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_diff_target: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_diff_text: String::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            local_diff_loading: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_generation: 0,
+            #[cfg(not(target_arch = "wasm32"))]
+            local_diff_generation: 0,
             request_generation: 0,
             auth_generation: 0,
             branches_request: None,
@@ -328,6 +387,66 @@ impl GitCraftApp {
         self.branch_create_request = None;
         self.management_request = None;
         self.mgmt_data = RepoManagementData::default();
+    }
+
+    /// Abre la ruta introducida utilizando exclusivamente consultas Git locales.
+    ///
+    /// La tarea se ejecuta fuera de la interfaz. Se incrementa un contador
+    /// cada vez que el usuario abre una carpeta, para descartar resultados viejos.
+    /// No se utilizan tokens, red ni operaciones de escritura Git.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn open_local_repository(&mut self, ctx: egui::Context) {
+        self.local_generation = self.local_generation.wrapping_add(1);
+        self.local_diff_generation = self.local_diff_generation.wrapping_add(1);
+        self.local_loading = true;
+        self.local_diff_loading = false;
+        self.local_error = None;
+        self.local_repository = None;
+        self.local_diff_target = None;
+        self.local_diff_text.clear();
+
+        // String posee sus caracteres: lo movemos a la tarea para que Rust
+        // no necesite prestar la caja de texto mientras Git está consultando.
+        let path = self.local_repo_input.clone();
+        let generation = self.local_generation;
+        let tx = self.tx.clone().unwrap();
+        spawn_task(ctx, async move {
+            let result = inspect_repository(&path);
+            let _ = tx.send(AsyncEvent::LocalRepositoryLoaded(generation, result));
+        });
+    }
+
+    /// Actualiza el mismo repositorio sin alterar su rama ni sus archivos.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn refresh_local_repository(&mut self, ctx: egui::Context) {
+        if let Some(repository) = &self.local_repository {
+            self.local_repo_input = repository.root.to_string_lossy().into_owned();
+            self.open_local_repository(ctx);
+        }
+    }
+
+    /// Solicita un diff sólo cuando hay un repositorio local abierto.
+    ///
+    /// Las respuestas llevan un identificador: si se solicita otro diff antes
+    /// de recibir el primero, el resultado antiguo no reemplaza la pantalla.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_local_diff(&mut self, ctx: egui::Context, target: LocalDiffTarget) {
+        let Some(repository) = &self.local_repository else {
+            return;
+        };
+        let root = repository.root.clone();
+        let tx = self.tx.clone().unwrap();
+
+        self.local_diff_generation = self.local_diff_generation.wrapping_add(1);
+        let generation = self.local_diff_generation;
+        self.local_diff_target = Some(target.clone());
+        self.local_diff_text.clear();
+        self.local_diff_loading = true;
+        self.local_error = None;
+        spawn_task(ctx, async move {
+            let result = read_diff(&root, &target);
+            let _ = tx.send(AsyncEvent::LocalDiffLoaded(generation, result));
+        });
     }
 
     /// Inicia una conexión nueva: sólo su respuesta puede establecer la sesión.
@@ -789,6 +908,37 @@ impl eframe::App for GitCraftApp {
                     }
                     Err(error) => self.status_notice = Some((format!("{}: {}", repo, error), true)),
                 },
+                // Las consultas Git locales no dependen del token ni de la sesión remota.
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::LocalRepositoryLoaded(generation, result) => {
+                    if generation != self.local_generation {
+                        continue;
+                    }
+                    self.local_loading = false;
+                    match result {
+                        Ok(repository) => {
+                            self.local_repo_input =
+                                repository.root.to_string_lossy().into_owned();
+                            self.local_repository = Some(repository);
+                            self.local_error = None;
+                        }
+                        Err(error) => {
+                            self.local_repository = None;
+                            self.local_error = Some(error);
+                        }
+                    }
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                AsyncEvent::LocalDiffLoaded(generation, result) => {
+                    if generation != self.local_diff_generation {
+                        continue;
+                    }
+                    self.local_diff_loading = false;
+                    match result {
+                        Ok(diff) => self.local_diff_text = diff,
+                        Err(error) => self.local_error = Some(error),
+                    }
+                }
                 AsyncEvent::McpToolsLoaded(Ok(tools)) => {
                     if let Some(first) = tools.first() {
                         self.mcp_selected_tool = first.name.clone();
@@ -833,6 +983,11 @@ impl eframe::App for GitCraftApp {
                     &mut self.active_tab,
                     ActiveTab::Repositories,
                     self.i18n.t(lang, "tab_repos"),
+                );
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::LocalGit,
+                    self.i18n.t(lang, "tab_local_git"),
                 );
                 ui.selectable_value(
                     &mut self.active_tab,
@@ -904,8 +1059,11 @@ impl eframe::App for GitCraftApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.user.is_none() {
+            // Git local no necesita login, ni siquiera cuando GitHub está desconectado.
+            // En Web se muestra una explicación de que los procesos Git son nativos.
+            if self.user.is_none() && self.active_tab != ActiveTab::LocalGit {
                 ui.heading(self.i18n.t(lang, "welcome_title"));
+                ui.label(self.i18n.t(lang, "local_without_github_hint"));
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.saved_token)
@@ -920,6 +1078,12 @@ impl eframe::App for GitCraftApp {
             }
             match self.active_tab {
                 ActiveTab::Repositories => render_repos_tab(self, ui, ctx),
+                ActiveTab::LocalGit => {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    render_local_git_tab(self, ui, ctx);
+                    #[cfg(target_arch = "wasm32")]
+                    ui.label(self.i18n.t(lang, "local_web_unavailable"));
+                }
                 ActiveTab::Changes => render_changes_tab(self, ui, ctx),
                 ActiveTab::PullRequests => render_prs_tab(self, ui, ctx),
                 ActiveTab::Issues => render_issues_tab(self, ui, ctx),
