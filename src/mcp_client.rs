@@ -237,7 +237,6 @@ async fn send_mcp_session(
     }
 }
 
-
 /// Prepara las variables de entorno de un proceso MCP en sistemas de escritorio.
 ///
 /// En Rust, un `Command` representa un programa que se ejecutará más adelante.
@@ -296,7 +295,10 @@ mod mcp_environment_tests {
         configure_mcp_github_environment(&mut command, token_autorizado);
 
         let output = command.output().await.expect("debe existir el comando env");
-        assert!(output.status.success(), "el proceso de prueba debe finalizar bien");
+        assert!(
+            output.status.success(),
+            "el proceso de prueba debe finalizar bien"
+        );
 
         let text = String::from_utf8(output.stdout).expect("salida UTF-8 del proceso de prueba");
         text.lines()
@@ -327,7 +329,9 @@ mod mcp_environment_tests {
     async fn autorizado_recibe_solo_token_ficticio() {
         let variables = probe_environment("E0_DUMMY_AUTORIZADO").await;
         assert_eq!(
-            variables.get("GITHUB_PERSONAL_ACCESS_TOKEN").map(String::as_str),
+            variables
+                .get("GITHUB_PERSONAL_ACCESS_TOKEN")
+                .map(String::as_str),
             Some("E0_DUMMY_AUTORIZADO")
         );
         assert_eq!(
