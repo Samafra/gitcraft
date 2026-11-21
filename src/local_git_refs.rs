@@ -126,9 +126,7 @@ fn validate_name(root: &Path, action: &RefCreation) -> Result<(), String> {
 /// Nunca se pasan revisiones libres como HEAD~3 o expresiones de consola.
 /// Los SHA proceden del selector de commits existente en E3-A.
 fn validate_target(root: &Path, sha: &str) -> Result<(), String> {
-    if !(sha.len() == 40 || sha.len() == 64)
-        || !sha.bytes().all(|byte| byte.is_ascii_hexdigit())
-    {
+    if !(sha.len() == 40 || sha.len() == 64) || !sha.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err("Selecciona un SHA completo de un commit válido.".into());
     }
     let kind = run_git(Some(root), &["cat-file", "-t", sha])?;
@@ -175,10 +173,7 @@ fn append_section(out: &mut Vec<u8>, bytes: &[u8]) {
 /// Se seleccionan exclusivamente los archivos modificados o no seguidos
 /// devueltos por Git. Nunca se siguen enlaces simbólicos a otras carpetas:
 /// para ellos se guarda el nombre del enlace, sin leer el destino externo.
-fn append_worktree_fingerprints(
-    root: &Path,
-    stamp: &mut Vec<u8>,
-) -> Result<(), String> {
+fn append_worktree_fingerprints(root: &Path, stamp: &mut Vec<u8>) -> Result<(), String> {
     let paths = run_git(
         Some(root),
         &[
@@ -193,7 +188,10 @@ fn append_worktree_fingerprints(
 
     // Las rutas Git vienen separadas por un byte NUL: espacios o comillas
     // dentro de un nombre no pueden convertirse en argumentos adicionales.
-    for bytes in paths.split(|value| *value == 0).filter(|part| !part.is_empty()) {
+    for bytes in paths
+        .split(|value| *value == 0)
+        .filter(|part| !part.is_empty())
+    {
         let relative = std::str::from_utf8(bytes)
             .map_err(|_| "E3-B no admite rutas de archivo que no sean UTF-8.".to_string())?;
         let location = root.join(relative);
@@ -215,10 +213,7 @@ fn append_worktree_fingerprints(
                 }
                 // hash-object sin -w sólo calcula el identificador: no escribe
                 // objetos ni altera el árbol de trabajo o el índice.
-                let hash = run_git(
-                    Some(root),
-                    &["hash-object", "--no-filters", "--", relative],
-                )?;
+                let hash = run_git(Some(root), &["hash-object", "--no-filters", "--", relative])?;
                 append_section(stamp, &hash);
             }
             Ok(_) => append_section(stamp, b"<entrada no regular>"),
@@ -258,8 +253,8 @@ fn safety_stamp(root: &Path) -> Result<Vec<u8>, String> {
     append_worktree_fingerprints(root, &mut stamp)?;
     let head = run_git(Some(root), &["rev-parse", "--verify", "HEAD"])?;
     append_section(&mut stamp, &head);
-    let branch = run_git(Some(root), &["symbolic-ref", "-q", "--short", "HEAD"])
-        .unwrap_or_default();
+    let branch =
+        run_git(Some(root), &["symbolic-ref", "-q", "--short", "HEAD"]).unwrap_or_default();
     append_section(&mut stamp, &branch);
     Ok(stamp)
 }
@@ -302,9 +297,7 @@ pub fn execute_ref(preview: &RefPreview) -> Result<RefCreated, String> {
     validate_name(&root, &preview.action)?;
     validate_target(&root, &preview.action.target)?;
     if safety_stamp(&root)? != preview.stamp {
-        return Err(
-            "Git ha cambiado después de la vista previa; revisa de nuevo.".into(),
-        );
+        return Err("Git ha cambiado después de la vista previa; revisa de nuevo.".into());
     }
     ensure_ref_absent(&root, &preview.action)?;
 
@@ -452,17 +445,24 @@ mod tests {
             fixture.action(RefKind::Branch, "funcionalidad/e3b"),
         )
         .unwrap();
-        assert!(fixture.git(&["branch", "--list", "funcionalidad/e3b"]).is_empty());
+        assert!(fixture
+            .git(&["branch", "--list", "funcionalidad/e3b"])
+            .is_empty());
         execute_ref(&preview).unwrap();
         assert_eq!(fixture.sha(), fixture.initial_head);
-        assert_eq!(std::fs::read(fixture.root.join("ejemplo.txt")).unwrap(), original);
+        assert_eq!(
+            std::fs::read(fixture.root.join("ejemplo.txt")).unwrap(),
+            original
+        );
         assert_eq!(
             String::from_utf8(fixture.git(&["branch", "--show-current"]))
                 .unwrap()
                 .trim(),
             "test-e3b"
         );
-        assert!(!fixture.git(&["branch", "--list", "funcionalidad/e3b"]).is_empty());
+        assert!(!fixture
+            .git(&["branch", "--list", "funcionalidad/e3b"])
+            .is_empty());
     }
 
     /// Una etiqueta ligera nueva señala el SHA seleccionado sin mover HEAD.
@@ -472,8 +472,7 @@ mod tests {
         let preview =
             preview_ref(&fixture.root, fixture.action(RefKind::Tag, "e3b-prueba")).unwrap();
         execute_ref(&preview).unwrap();
-        let tag = String::from_utf8(fixture.git(&["rev-parse", "refs/tags/e3b-prueba"]))
-            .unwrap();
+        let tag = String::from_utf8(fixture.git(&["rev-parse", "refs/tags/e3b-prueba"])).unwrap();
         assert_eq!(tag.trim(), fixture.initial_head);
         assert_eq!(fixture.sha(), fixture.initial_head);
         assert!(fixture.git(&["status", "--porcelain"]).is_empty());
@@ -495,11 +494,7 @@ mod tests {
     fn invalid_names_are_rejected() {
         let fixture = Fixture::new();
         for name in ["-f", "../fuera", "nombre con espacios", "mal..nombre", ""] {
-            assert!(preview_ref(
-                &fixture.root,
-                fixture.action(RefKind::Branch, name)
-            )
-            .is_err());
+            assert!(preview_ref(&fixture.root, fixture.action(RefKind::Branch, name)).is_err());
         }
         assert!(fixture.git(&["status", "--porcelain"]).is_empty());
     }
@@ -552,10 +547,7 @@ mod tests {
         // Se usa una ruta absoluta, ya que Git puede ejecutar hooks
         // desde .git en lugar de la raíz del directorio de trabajo.
         let marker = fixture.root.join("hook-ejecutado.txt");
-        let body = format!(
-            "#!/bin/sh\nprintf 'ejecutado' > \"{}\"\n",
-            marker.display()
-        );
+        let body = format!("#!/bin/sh\nprintf 'ejecutado' > \"{}\"\n", marker.display());
         std::fs::write(&script, body).unwrap();
         let mut permissions = std::fs::metadata(&script).unwrap().permissions();
         permissions.set_mode(0o755);
@@ -563,11 +555,8 @@ mod tests {
         let hooks_path = hooks.to_str().unwrap();
         fixture.git(&["config", "core.hooksPath", hooks_path]);
 
-        let preview = preview_ref(
-            &fixture.root,
-            fixture.action(RefKind::Branch, "sin-hooks"),
-        )
-        .unwrap();
+        let preview =
+            preview_ref(&fixture.root, fixture.action(RefKind::Branch, "sin-hooks")).unwrap();
         execute_ref(&preview).unwrap();
         assert!(!marker.exists());
     }
@@ -587,7 +576,9 @@ mod tests {
         .unwrap();
         std::fs::write(fixture.root.join("ejemplo.txt"), "segunda edición\n").unwrap();
         assert!(execute_ref(&preview).is_err());
-        assert!(fixture.git(&["branch", "--list", "cambio-oculto"]).is_empty());
+        assert!(fixture
+            .git(&["branch", "--list", "cambio-oculto"])
+            .is_empty());
     }
 
     /// Si cambia el contenido de un archivo no seguido, también se rechaza.
@@ -599,11 +590,8 @@ mod tests {
         let fixture = Fixture::new();
         let name = "nuevo archivo.txt";
         std::fs::write(fixture.root.join(name), "versión uno\n").unwrap();
-        let preview = preview_ref(
-            &fixture.root,
-            fixture.action(RefKind::Tag, "tag-obsoleta"),
-        )
-        .unwrap();
+        let preview =
+            preview_ref(&fixture.root, fixture.action(RefKind::Tag, "tag-obsoleta")).unwrap();
         std::fs::write(fixture.root.join(name), "versión dos\n").unwrap();
         assert!(execute_ref(&preview).is_err());
         assert!(fixture.git(&["tag", "--list", "tag-obsoleta"]).is_empty());

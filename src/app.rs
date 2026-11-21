@@ -709,9 +709,8 @@ impl GitCraftApp {
                 .iter()
                 .any(|revision| revision.sha == self.history.ref_target)
         {
-            self.history.ref_error = Some(
-                "El commit seleccionado ya no pertenece al historial cargado.".into(),
-            );
+            self.history.ref_error =
+                Some("El commit seleccionado ya no pertenece al historial cargado.".into());
             return;
         }
 
@@ -754,18 +753,14 @@ impl GitCraftApp {
         let Some(preview) = self.history.ref_preview.take() else {
             return;
         };
-        let same_root = self
-            .local_repository
-            .as_ref()
-            .map(|repo| &repo.root)
-            == Some(&preview.root);
+        let same_root =
+            self.local_repository.as_ref().map(|repo| &repo.root) == Some(&preview.root);
         let same_selection = preview.action.kind == self.history.ref_kind
             && preview.action.name == self.history.ref_name
             && preview.action.target == self.history.ref_target;
         if !same_root || !same_selection {
-            self.history.ref_error = Some(
-                "La carpeta o la selección cambió. Genera otra vista previa.".into(),
-            );
+            self.history.ref_error =
+                Some("La carpeta o la selección cambió. Genera otra vista previa.".into());
             return;
         }
         let tx = self.tx.clone().unwrap();
