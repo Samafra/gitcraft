@@ -18,7 +18,11 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
     ui.horizontal_wrapped(|ui| {
         ui.label(app.i18n.t(lang, "mcp_transport_label"));
         ui.selectable_value(&mut app.mcp_transport, McpTransport::Stdio, "Stdio (CLI)");
-        ui.selectable_value(&mut app.mcp_transport, McpTransport::Http, "HTTP / JSON-RPC");
+        ui.selectable_value(
+            &mut app.mcp_transport,
+            McpTransport::Http,
+            "HTTP / JSON-RPC",
+        );
     });
 
     if app.mcp_transport != transport_before {
@@ -27,16 +31,46 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
 
     // Resolvemos la carpeta HOME del usuario (/Users/francisco) para que el binario funcione desde cualquier directorio.
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let release_bin = format!("{}/Projects/gitcraft/target/release/gitcraft --mcp-server", home);
-    let dev_cargo = format!("cargo run --manifest-path {}/Projects/gitcraft/Cargo.toml -- --mcp-server", home);
+    let release_bin = format!(
+        "{}/Projects/gitcraft/target/release/gitcraft --mcp-server",
+        home
+    );
+    let dev_cargo = format!(
+        "cargo run --manifest-path {}/Projects/gitcraft/Cargo.toml -- --mcp-server",
+        home
+    );
 
     let presets: Vec<(&str, McpTransport, String)> = vec![
-        ("🦀 GitCraft (Binario Release)", McpTransport::Stdio, release_bin),
-        ("🦀 GitCraft (Modo Cargo Dev)", McpTransport::Stdio, dev_cargo),
-        ("🐙 GitHub MCP Oficial (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-github".into()),
-        ("📂 Archivos Locales /Users (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-filesystem /Users".into()),
-        ("🧠 Memoria Persistente (npx)", McpTransport::Stdio, "npx -y @modelcontextprotocol/server-memory".into()),
-        ("🌐 Servidor HTTP Local (8080)", McpTransport::Http, "http://localhost:8080/mcp".into()),
+        (
+            "🦀 GitCraft (Binario Release)",
+            McpTransport::Stdio,
+            release_bin,
+        ),
+        (
+            "🦀 GitCraft (Modo Cargo Dev)",
+            McpTransport::Stdio,
+            dev_cargo,
+        ),
+        (
+            "🐙 GitHub MCP Oficial (npx)",
+            McpTransport::Stdio,
+            "npx -y @modelcontextprotocol/server-github".into(),
+        ),
+        (
+            "📂 Archivos Locales /Users (npx)",
+            McpTransport::Stdio,
+            "npx -y @modelcontextprotocol/server-filesystem /Users".into(),
+        ),
+        (
+            "🧠 Memoria Persistente (npx)",
+            McpTransport::Stdio,
+            "npx -y @modelcontextprotocol/server-memory".into(),
+        ),
+        (
+            "🌐 Servidor HTTP Local (8080)",
+            McpTransport::Http,
+            "http://localhost:8080/mcp".into(),
+        ),
     ];
 
     ui.horizontal(|ui| {
@@ -45,7 +79,10 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
             .selected_text("Seleccionar servidor...")
             .show_ui(ui, |ui| {
                 for (label, transport, cmd) in &presets {
-                    if ui.selectable_label(app.mcp_endpoint == *cmd, *label).clicked() {
+                    if ui
+                        .selectable_label(app.mcp_endpoint == *cmd, *label)
+                        .clicked()
+                    {
                         // Un preset diferente requiere autorizar expresamente otra vez.
                         if app.mcp_transport != *transport || app.mcp_endpoint != *cmd {
                             app.mcp_token_authorized_endpoint = None;
@@ -59,11 +96,14 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
 
     // Caja de texto manual (se rellena sola al elegir del desplegable o permite escribir libremente).
     // Editar el comando manualmente invalida el permiso anterior (incluso si se vuelve a escribir).
-    if ui.add(
-        egui::TextEdit::singleline(&mut app.mcp_endpoint)
-            .desired_width(f32::INFINITY)
-            .hint_text(app.i18n.t(lang, "mcp_cmd_hint")),
-    ).changed() {
+    if ui
+        .add(
+            egui::TextEdit::singleline(&mut app.mcp_endpoint)
+                .desired_width(f32::INFINITY)
+                .hint_text(app.i18n.t(lang, "mcp_cmd_hint")),
+        )
+        .changed()
+    {
         app.mcp_token_authorized_endpoint = None;
     }
 
@@ -71,7 +111,13 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
     // Nunca está activado por defecto y no se guarda entre sesiones.
     if app.mcp_transport == McpTransport::Stdio {
         let mut share_pat = app.mcp_token_is_authorized();
-        if ui.checkbox(&mut share_pat, "Autorizar envío del token GitHub a este servidor MCP").changed() {
+        if ui
+            .checkbox(
+                &mut share_pat,
+                "Autorizar envío del token GitHub a este servidor MCP",
+            )
+            .changed()
+        {
             app.mcp_token_authorized_endpoint = if share_pat {
                 Some(app.mcp_endpoint.clone())
             } else {
@@ -79,11 +125,19 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
             };
         }
         if share_pat {
-            ui.label(egui::RichText::new("Este proceso podrá acceder al token; autoriza sólo servidores de confianza.").small().weak());
+            ui.label(
+                egui::RichText::new(
+                    "Este proceso podrá acceder al token; autoriza sólo servidores de confianza.",
+                )
+                .small()
+                .weak(),
+            );
         }
     }
 
-    if ui.button(app.i18n.t(lang, "mcp_connect_btn")).clicked() && !app.mcp_endpoint.trim().is_empty() {
+    if ui.button(app.i18n.t(lang, "mcp_connect_btn")).clicked()
+        && !app.mcp_endpoint.trim().is_empty()
+    {
         app.trigger_mcp_discover(ctx.clone());
     }
 
@@ -106,7 +160,11 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
                 }
             });
 
-        if let Some(t) = app.mcp_tools.iter().find(|t| t.name == app.mcp_selected_tool) {
+        if let Some(t) = app
+            .mcp_tools
+            .iter()
+            .find(|t| t.name == app.mcp_selected_tool)
+        {
             if let Some(desc) = &t.description {
                 ui.label(egui::RichText::new(desc).weak().small());
             }
@@ -121,7 +179,9 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
                 .desired_rows(4),
         );
 
-        if ui.button(app.i18n.t(lang, "mcp_run_tool_btn")).clicked() && !app.mcp_selected_tool.is_empty() {
+        if ui.button(app.i18n.t(lang, "mcp_run_tool_btn")).clicked()
+            && !app.mcp_selected_tool.is_empty()
+        {
             app.trigger_mcp_call(ctx.clone());
         }
     }
@@ -129,12 +189,15 @@ pub fn render_mcp_ui(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Conte
     if !app.mcp_last_output.is_empty() {
         ui.separator();
         ui.label(egui::RichText::new(app.i18n.t(lang, "mcp_output_header")).strong());
-        egui::ScrollArea::vertical().id_salt("mcp_out_scroll").max_height(240.0).show(ui, |ui| {
-            ui.add(
-                egui::TextEdit::multiline(&mut app.mcp_last_output)
-                    .code_editor()
-                    .desired_width(f32::INFINITY),
-            );
-        });
+        egui::ScrollArea::vertical()
+            .id_salt("mcp_out_scroll")
+            .max_height(240.0)
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut app.mcp_last_output)
+                        .code_editor()
+                        .desired_width(f32::INFINITY),
+                );
+            });
     }
 }

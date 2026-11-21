@@ -43,8 +43,8 @@ pub struct WorkflowRunItem {
     pub status: String,             // "completed", "in_progress", "queued"
     pub conclusion: Option<String>, // Some("success"), Some("failure"), None
     pub head_branch: String,
-    pub created_at: String,         // Fecha de ejecución ISO 8601
-    pub actor: WorkflowActor,       // Usuario que ejecutó el workflow
+    pub created_at: String,   // Fecha de ejecución ISO 8601
+    pub actor: WorkflowActor, // Usuario que ejecutó el workflow
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -76,12 +76,22 @@ pub struct RepoManagementData {
 fn client_and_base(token: &str) -> Result<(reqwest::Client, String), String> {
     let api = ["https://", "api.", "github.com"].concat();
     let mut headers = HeaderMap::new();
-    let auth = HeaderValue::from_str(&format!("Bearer {}", token.trim())).map_err(|_| "Token inválido".to_string())?;
+    let auth = HeaderValue::from_str(&format!("Bearer {}", token.trim()))
+        .map_err(|_| "Token inválido".to_string())?;
     headers.insert(AUTHORIZATION, auth);
     headers.insert(USER_AGENT, HeaderValue::from_static("GitCraft-Rust-Client"));
-    headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));
-    headers.insert("X-GitHub-Api-Version", HeaderValue::from_static("2022-11-28"));
-    let client = reqwest::Client::builder().default_headers(headers).build().map_err(|e| e.to_string())?;
+    headers.insert(
+        ACCEPT,
+        HeaderValue::from_static("application/vnd.github+json"),
+    );
+    headers.insert(
+        "X-GitHub-Api-Version",
+        HeaderValue::from_static("2022-11-28"),
+    );
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .map_err(|e| e.to_string())?;
     Ok((client, api))
 }
 
@@ -96,24 +106,35 @@ async fn fetch_collection<T: serde::de::DeserializeOwned>(
     resource: &str,
 ) -> Result<T, String> {
     // Primero terminamos la petición; un error de red se comunica al usuario.
-    let response = client.get(url).send().await
+    let response = client
+        .get(url)
+        .send()
+        .await
         .map_err(|error| format!("Fallo de red al consultar {}: {}", resource, error))?;
     let status = response.status();
     if !status.is_success() {
         // Limitar la longitud de la respuesta para no llenar el panel de errores.
         let details = response.text().await.unwrap_or_default();
         let details: String = details.chars().take(240).collect();
-        return Err(format!("GitHub respondió {} al consultar {}: {}", status, resource, details));
+        return Err(format!(
+            "GitHub respondió {} al consultar {}: {}",
+            status, resource, details
+        ));
     }
     // Un HTTP 200 con JSON inesperado también es un error, no una lista vacía.
-    response.json::<T>().await
+    response
+        .json::<T>()
+        .await
         .map_err(|error| format!("Respuesta JSON no válida para {}: {}", resource, error))
 }
 
 // Descarga PRs, Issues, Actions y Releases del repositorio seleccionado.
 /// Recupera las colecciones de gestión para un repositorio concreto.
 /// Ante cualquier respuesta HTTP o JSON errónea devuelve `Err`, nunca datos inventados.
-pub async fn fetch_management_data(token: String, full_name: String) -> Result<RepoManagementData, String> {
+pub async fn fetch_management_data(
+    token: String,
+    full_name: String,
+) -> Result<RepoManagementData, String> {
     let (client, api) = client_and_base(&token)?;
 
     // La API GitHub tiene endpoints independientes para cada colección. Cualquier
@@ -122,39 +143,62 @@ pub async fn fetch_management_data(token: String, full_name: String) -> Result<R
         &client,
         format!("{}/repos/{}/pulls?state=open&per_page=50", api, full_name),
         "Pull Requests",
-    ).await?;
+    )
+    .await?;
 
     let all_issues: Vec<IssueItem> = fetch_collection(
         &client,
         format!("{}/repos/{}/issues?state=open&per_page=50", api, full_name),
         "Issues",
-    ).await?;
+    )
+    .await?;
     // GitHub incluye PRs en el endpoint de Issues: los excluimos de esa pestaña.
-    let issues = all_issues.into_iter().filter(|item| item.pull_request.is_none()).collect();
+    let issues = all_issues
+        .into_iter()
+        .filter(|item| item.pull_request.is_none())
+        .collect();
 
     let runs_wrap: WorkflowRunsWrapper = fetch_collection(
         &client,
         format!("{}/repos/{}/actions/runs?per_page=20", api, full_name),
         "GitHub Actions",
-    ).await?;
+    )
+    .await?;
 
     let releases: Vec<ReleaseItem> = fetch_collection(
         &client,
         format!("{}/repos/{}/releases?per_page=20", api, full_name),
         "Releases",
-    ).await?;
+    )
+    .await?;
 
-    Ok(RepoManagementData { prs, issues, runs: runs_wrap.workflow_runs, releases })
+    Ok(RepoManagementData {
+        prs,
+        issues,
+        runs: runs_wrap.workflow_runs,
+        releases,
+    })
 }
 
 // Crea un nuevo Pull Request.
 /// Abre un Pull Request entre dos ramas del repositorio indicado.
-pub async fn create_pr(token: String, full_name: String, title: String, head: String, base: String) -> Result<(), String> {
+pub async fn create_pr(
+    token: String,
+    full_name: String,
+    title: String,
+    head: String,
+    base: String,
+) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
-    let resp = client.post(format!("{}/repos/{}/pulls", api, full_name))
+    let resp = client
+        .post(format!("{}/repos/{}/pulls", api, full_name))
         .json(&json!({ "title": title, "head": head, "base": base }))
-        .send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() { return Err(resp.text().await.unwrap_or_default()); }
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
     Ok(())
 }
 
@@ -162,32 +206,62 @@ pub async fn create_pr(token: String, full_name: String, title: String, head: St
 /// Fusiona un Pull Request mediante GitHub, con los permisos del usuario autenticado.
 pub async fn merge_pr(token: String, full_name: String, pr_number: u64) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
-    let resp = client.put(format!("{}/repos/{}/pulls/{}/merge", api, full_name, pr_number))
+    let resp = client
+        .put(format!(
+            "{}/repos/{}/pulls/{}/merge",
+            api, full_name, pr_number
+        ))
         .json(&json!({ "merge_method": "merge" }))
-        .send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() { return Err(resp.text().await.unwrap_or_default()); }
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
     Ok(())
 }
 
 // Crea un nuevo Issue.
 /// Crea un Issue con título y contenido en el repositorio remoto.
-pub async fn create_issue(token: String, full_name: String, title: String, body: String) -> Result<(), String> {
+pub async fn create_issue(
+    token: String,
+    full_name: String,
+    title: String,
+    body: String,
+) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
-    let resp = client.post(format!("{}/repos/{}/issues", api, full_name))
+    let resp = client
+        .post(format!("{}/repos/{}/issues", api, full_name))
         .json(&json!({ "title": title, "body": body }))
-        .send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() { return Err(resp.text().await.unwrap_or_default()); }
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
     Ok(())
 }
 
 // Cierra un Issue abierto.
 /// Cambia un Issue a cerrado, preservando sus mensajes y comentarios.
-pub async fn close_issue(token: String, full_name: String, issue_number: u64) -> Result<(), String> {
+pub async fn close_issue(
+    token: String,
+    full_name: String,
+    issue_number: u64,
+) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
-    let resp = client.patch(format!("{}/repos/{}/issues/{}", api, full_name, issue_number))
+    let resp = client
+        .patch(format!(
+            "{}/repos/{}/issues/{}",
+            api, full_name, issue_number
+        ))
         .json(&json!({ "state": "closed" }))
-        .send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() { return Err(resp.text().await.unwrap_or_default()); }
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
     Ok(())
 }
 
@@ -195,20 +269,39 @@ pub async fn close_issue(token: String, full_name: String, issue_number: u64) ->
 /// Solicita a GitHub relanzar un workflow existente; no es el mecanismo de validación de GitCraft.
 pub async fn rerun_workflow(token: String, full_name: String, run_id: u64) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
-    let resp = client.post(format!("{}/repos/{}/actions/runs/{}/rerun", api, full_name, run_id))
-        .send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() { return Err(resp.text().await.unwrap_or_default()); }
+    let resp = client
+        .post(format!(
+            "{}/repos/{}/actions/runs/{}/rerun",
+            api, full_name, run_id
+        ))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
     Ok(())
 }
 
 // Publica una nueva Release con su tag.
 /// Publica una Release remota con etiqueta, título y notas.
-pub async fn create_release(token: String, full_name: String, tag: String, name: String, body: String) -> Result<(), String> {
+pub async fn create_release(
+    token: String,
+    full_name: String,
+    tag: String,
+    name: String,
+    body: String,
+) -> Result<(), String> {
     let (client, api) = client_and_base(&token)?;
-    let resp = client.post(format!("{}/repos/{}/releases", api, full_name))
+    let resp = client
+        .post(format!("{}/repos/{}/releases", api, full_name))
         .json(&json!({ "tag_name": tag, "name": name, "body": body }))
-        .send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() { return Err(resp.text().await.unwrap_or_default()); }
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(resp.text().await.unwrap_or_default());
+    }
     Ok(())
 }
 
@@ -233,18 +326,24 @@ mod tests {
         let handle = std::thread::spawn(move || {
             // Un servidor de prueba no debe quedar bloqueado indefinidamente en accept().
             // Esperamos como máximo cinco segundos por una petición HTTP local.
-            listener.set_nonblocking(true).expect("servidor no bloqueante");
+            listener
+                .set_nonblocking(true)
+                .expect("servidor no bloqueante");
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
             loop {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         let mut buffer = [0_u8; 1024];
                         let _ = stream.read(&mut buffer);
-                        stream.write_all(response.as_bytes()).expect("respuesta de prueba");
+                        stream
+                            .write_all(response.as_bytes())
+                            .expect("respuesta de prueba");
                         break;
                     }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
-                        && std::time::Instant::now() < deadline => {
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::WouldBlock
+                            && std::time::Instant::now() < deadline =>
+                    {
                         std::thread::sleep(std::time::Duration::from_millis(20));
                     }
                     Err(error) => panic!("no llegó la petición HTTP de prueba: {}", error),
@@ -269,7 +368,8 @@ mod tests {
     /// Una petición limitada por GitHub tampoco debe mostrarse sin resultados.
     #[tokio::test]
     async fn rate_limit_is_reported() {
-        let (url, server) = start_test_server("429 Too Many Requests", r#"{"message":"Rate limit"}"#);
+        let (url, server) =
+            start_test_server("429 Too Many Requests", r#"{"message":"Rate limit"}"#);
         let result: Result<Vec<IssueItem>, String> =
             fetch_collection(&reqwest::Client::new(), url, "Issues").await;
         server.join().expect("servidor de pruebas finalizado");

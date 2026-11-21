@@ -26,7 +26,7 @@ pub struct RepoEntry {
     #[serde(rename = "type")]
     pub entry_type: String,
     pub content: Option<String>,
-    pub last_commit_msg: String,  // Mensaje del último commit que tocó este archivo/carpeta
+    pub last_commit_msg: String, // Mensaje del último commit que tocó este archivo/carpeta
     pub last_commit_hash: String, // Hash corto de 7 caracteres (ej. "a1b2c3d")
     pub last_commit_date: String, // Fecha formateada del último commit (ej. "2026-11-15 00:40")
 }
@@ -47,8 +47,14 @@ fn build_client(token: &str) -> Result<(reqwest::Client, String), String> {
         .map_err(|_| "Token inválido".to_string())?;
     headers.insert(AUTHORIZATION, auth);
     headers.insert(USER_AGENT, HeaderValue::from_static("GitCraft-Rust-Client"));
-    headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));
-    headers.insert("X-GitHub-Api-Version", HeaderValue::from_static("2022-11-28"));
+    headers.insert(
+        ACCEPT,
+        HeaderValue::from_static("application/vnd.github+json"),
+    );
+    headers.insert(
+        "X-GitHub-Api-Version",
+        HeaderValue::from_static("2022-11-28"),
+    );
 
     let client = reqwest::Client::builder()
         .default_headers(headers)
@@ -68,7 +74,9 @@ pub async fn fetch_branches(token: String, full_name: String) -> Result<Vec<GitB
     if !resp.status().is_success() {
         return Err(format!("Error ramas ({})", resp.status()));
     }
-    resp.json::<Vec<GitBranch>>().await.map_err(|e| e.to_string())
+    resp.json::<Vec<GitBranch>>()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn create_branch(
@@ -83,7 +91,12 @@ pub async fn create_branch(
         "ref": format!("refs/heads/{}", new_branch.trim()),
         "sha": base_sha
     });
-    let resp = client.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
+    let resp = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         let txt = resp.text().await.unwrap_or_default();
         return Err(format!("No se pudo crear la rama: {}", txt));
@@ -100,7 +113,10 @@ async fn enrich_with_last_commit(
     mut item: RepoEntry,
 ) -> RepoEntry {
     let ep = encode_url_segment(&item.path);
-    let commit_url = format!("{}/repos/{}/commits?sha={}&path={}&per_page=1", api_url, repo_name, branch, ep);
+    let commit_url = format!(
+        "{}/repos/{}/commits?sha={}&path={}&per_page=1",
+        api_url, repo_name, branch, ep
+    );
     if let Ok(r) = client.get(&commit_url).send().await {
         if let Ok(vals) = r.json::<Vec<serde_json::Value>>().await {
             if let Some(first) = vals.first() {
@@ -132,7 +148,10 @@ pub async fn fetch_directory(
     let url = if clean_path.is_empty() {
         format!("{}/repos/{}/contents?ref={}", api, full_name, clean_branch)
     } else {
-        format!("{}/repos/{}/contents/{}?ref={}", api, full_name, clean_path, clean_branch)
+        format!(
+            "{}/repos/{}/contents/{}?ref={}",
+            api, full_name, clean_path, clean_branch
+        )
     };
 
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
@@ -140,10 +159,17 @@ pub async fn fetch_directory(
         return Ok(Vec::new());
     }
     if !resp.status().is_success() {
-        return Err(format!("Error listando archivos ({}) en '{}'", resp.status(), path));
+        return Err(format!(
+            "Error listando archivos ({}) en '{}'",
+            resp.status(),
+            path
+        ));
     }
 
-    let mut entries = resp.json::<Vec<RepoEntry>>().await.map_err(|e| e.to_string())?;
+    let mut entries = resp
+        .json::<Vec<RepoEntry>>()
+        .await
+        .map_err(|e| e.to_string())?;
     // Ordenamos: primero carpetas ("dir"), luego archivos ("file") alfabéticamente.
     entries.sort_by(|a, b| b.entry_type.cmp(&a.entry_type).then(a.name.cmp(&b.name)));
 
@@ -197,18 +223,30 @@ pub async fn fetch_file_content(
     let (client, api) = build_client(&token)?;
     let clean_path = encode_url_segment(path.trim_start_matches('/'));
     let clean_branch = encode_url_segment(&branch);
-    let url = format!("{}/repos/{}/contents/{}?ref={}", api, full_name, clean_path, clean_branch);
+    let url = format!(
+        "{}/repos/{}/contents/{}?ref={}",
+        api, full_name, clean_path, clean_branch
+    );
 
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
-        return Err(format!("Error abriendo archivo ({}) en '{}'", resp.status(), path));
+        return Err(format!(
+            "Error abriendo archivo ({}) en '{}'",
+            resp.status(),
+            path
+        ));
     }
     let entry: RepoEntry = resp.json().await.map_err(|e| e.to_string())?;
     let raw_b64 = entry.content.unwrap_or_default().replace('\n', "");
     if raw_b64.is_empty() {
-        return Ok(("[Archivo vacío o demasiado grande (>1 MB) para vista previa]".into(), entry.sha));
+        return Ok((
+            "[Archivo vacío o demasiado grande (>1 MB) para vista previa]".into(),
+            entry.sha,
+        ));
     }
-    let bytes = BASE64.decode(raw_b64).map_err(|e| format!("Error Base64: {}", e))?;
+    let bytes = BASE64
+        .decode(raw_b64)
+        .map_err(|e| format!("Error Base64: {}", e))?;
     let text = String::from_utf8_lossy(&bytes).to_string();
     Ok((text, entry.sha))
 }
@@ -232,12 +270,20 @@ pub async fn commit_file_push(
         "sha": sha,
         "branch": branch
     });
-    let resp = client.put(&url).json(&body).send().await.map_err(|e| e.to_string())?;
+    let resp = client
+        .put(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         let txt = resp.text().await.unwrap_or_default();
         return Err(format!("Error en Commit/Push: {}", txt));
     }
     let val: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let next_sha = val["content"]["sha"].as_str().unwrap_or_default().to_string();
+    let next_sha = val["content"]["sha"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
     Ok(next_sha)
 }

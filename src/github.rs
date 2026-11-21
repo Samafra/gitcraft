@@ -33,9 +33,7 @@ pub struct GitHubRepo {
 
 // Función asíncrona que devuelve un Result<Éxito, Error>.
 // En Rust no existen excepciones (try/catch); los errores se devuelven explícitamente como valores.
-pub async fn fetch_user_and_repos(
-    token: String,
-) -> Result<(GitHubUser, Vec<GitHubRepo>), String> {
+pub async fn fetch_user_and_repos(token: String) -> Result<(GitHubUser, Vec<GitHubRepo>), String> {
     // Eliminamos espacios o comillas accidentales al principio o final del token.
     let clean_token = token.trim().trim_matches('"').trim_matches('\'');
 
@@ -49,8 +47,14 @@ pub async fn fetch_user_and_repos(
 
     headers.insert(AUTHORIZATION, auth_val);
     headers.insert(USER_AGENT, HeaderValue::from_static("GitCraft-Rust-Client"));
-    headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));
-    headers.insert("X-GitHub-Api-Version", HeaderValue::from_static("2022-11-28"));
+    headers.insert(
+        ACCEPT,
+        HeaderValue::from_static("application/vnd.github+json"),
+    );
+    headers.insert(
+        "X-GitHub-Api-Version",
+        HeaderValue::from_static("2022-11-28"),
+    );
 
     // Creamos el cliente HTTP con esas cabeceras aplicadas a todas las peticiones.
     let client = reqwest::Client::builder()
@@ -73,7 +77,10 @@ pub async fn fetch_user_and_repos(
         .map_err(|e| format!("Error leyendo respuesta /user: {}", e))?;
 
     if !status.is_success() {
-        return Err(format!("GitHub rechazó el token ({}): {}", status, raw_user_text));
+        return Err(format!(
+            "GitHub rechazó el token ({}): {}",
+            status, raw_user_text
+        ));
     }
 
     // Convertimos el texto JSON en nuestra estructura GitHubUser.
@@ -81,7 +88,10 @@ pub async fn fetch_user_and_repos(
         .map_err(|e| format!("Error parseando perfil ({}): {}", e, raw_user_text))?;
 
     if user.login.is_empty() {
-        return Err(format!("Respuesta sin login desde {}: {}", user_url, raw_user_text));
+        return Err(format!(
+            "Respuesta sin login desde {}: {}",
+            user_url, raw_user_text
+        ));
     }
 
     // 2. Solicitamos la lista de repositorios (públicos y privados) del usuario autenticado.
@@ -99,7 +109,10 @@ pub async fn fetch_user_and_repos(
         .map_err(|e| format!("Error leyendo respuesta /user/repos: {}", e))?;
 
     if !repos_status.is_success() {
-        return Err(format!("Error en /user/repos ({}): {}", repos_status, raw_repos_text));
+        return Err(format!(
+            "Error en /user/repos ({}): {}",
+            repos_status, raw_repos_text
+        ));
     }
 
     // Convertimos el array JSON en un vector (lista dinámica Vec<GitHubRepo>).

@@ -19,9 +19,13 @@ pub async fn run_mcp_server() {
 
     while let Ok(Some(line)) = lines.next_line().await {
         let trimmed = line.trim();
-        if trimmed.is_empty() { continue; }
+        if trimmed.is_empty() {
+            continue;
+        }
 
-        let Ok(req) = serde_json::from_str::<Value>(trimmed) else { continue };
+        let Ok(req) = serde_json::from_str::<Value>(trimmed) else {
+            continue;
+        };
         let method = req["method"].as_str().unwrap_or("");
         let id = req.get("id").cloned();
 
@@ -133,29 +137,54 @@ async fn handle_tool_call(id: Value, params: &Value, token: &str) -> Value {
     let args = &params["arguments"];
 
     let exec_result: Result<String, String> = match name {
-        "gitcraft_list_repos" => {
-            fetch_user_and_repos(token.to_string()).await.map(|(u, repos)| {
-                let list: Vec<String> = repos.iter().map(|r| format!("{} ({})", r.full_name, r.default_branch)).collect();
+        "gitcraft_list_repos" => fetch_user_and_repos(token.to_string())
+            .await
+            .map(|(u, repos)| {
+                let list: Vec<String> = repos
+                    .iter()
+                    .map(|r| format!("{} ({})", r.full_name, r.default_branch))
+                    .collect();
                 format!("Usuario: @{}\nRepositorios:\n{}", u.login, list.join("\n"))
-            })
-        }
+            }),
         "gitcraft_read_file" => {
             let repo = args["full_name"].as_str().unwrap_or("").to_string();
             let branch = args["branch"].as_str().unwrap_or("main").to_string();
             let path = args["path"].as_str().unwrap_or("").to_string();
-            fetch_file_content(token.to_string(), repo, branch, path).await.map(|(txt, sha)| format!("SHA: {}\n---\n{}", sha, txt))
+            fetch_file_content(token.to_string(), repo, branch, path)
+                .await
+                .map(|(txt, sha)| format!("SHA: {}\n---\n{}", sha, txt))
         }
         "gitcraft_commit_file" => {
             let repo = args["full_name"].as_str().unwrap_or("").to_string();
             let branch = args["branch"].as_str().unwrap_or("main").to_string();
             let path = args["path"].as_str().unwrap_or("").to_string();
             let content = args["content"].as_str().unwrap_or("").to_string();
-            let msg = args["message"].as_str().unwrap_or("Update via GitCraft MCP").to_string();
+            let msg = args["message"]
+                .as_str()
+                .unwrap_or("Update via GitCraft MCP")
+                .to_string();
             // Obtenemos primero el SHA actual del archivo antes de hacer Commit & Push.
-            match fetch_file_content(token.to_string(), repo.clone(), branch.clone(), path.clone()).await {
-                Ok((_, sha)) => crate::repo_ops::commit_file_push(token.to_string(), repo, branch, path, sha, content, msg)
-                    .await
-                    .map(|new_sha| format!("Commit & Push realizado con éxito. Nuevo SHA: {}", new_sha)),
+            match fetch_file_content(
+                token.to_string(),
+                repo.clone(),
+                branch.clone(),
+                path.clone(),
+            )
+            .await
+            {
+                Ok((_, sha)) => crate::repo_ops::commit_file_push(
+                    token.to_string(),
+                    repo,
+                    branch,
+                    path,
+                    sha,
+                    content,
+                    msg,
+                )
+                .await
+                .map(|new_sha| {
+                    format!("Commit & Push realizado con éxito. Nuevo SHA: {}", new_sha)
+                }),
                 Err(e) => Err(e),
             }
         }
@@ -163,18 +192,26 @@ async fn handle_tool_call(id: Value, params: &Value, token: &str) -> Value {
             let repo = args["full_name"].as_str().unwrap_or("").to_string();
             let title = args["title"].as_str().unwrap_or("").to_string();
             let body = args["body"].as_str().unwrap_or("").to_string();
-            crate::github_manage::create_issue(token.to_string(), repo, title, body).await.map(|_| "Issue creado correctamente en GitHub.".into())
+            crate::github_manage::create_issue(token.to_string(), repo, title, body)
+                .await
+                .map(|_| "Issue creado correctamente en GitHub.".into())
         }
         "gitcraft_merge_pr" => {
             let repo = args["full_name"].as_str().unwrap_or("").to_string();
             let num = args["pr_number"].as_u64().unwrap_or(0);
-            crate::github_manage::merge_pr(token.to_string(), repo, num).await.map(|_| format!("Pull Request #{} fusionado correctamente.", num))
+            crate::github_manage::merge_pr(token.to_string(), repo, num)
+                .await
+                .map(|_| format!("Pull Request #{} fusionado correctamente.", num))
         }
         _ => Err(format!("Herramienta desconocida: {}", name)),
     };
 
     match exec_result {
-        Ok(text) => json!({ "jsonrpc": "2.0", "id": id, "result": { "content": [{ "type": "text", "text": text }] } }),
-        Err(err) => json!({ "jsonrpc": "2.0", "id": id, "result": { "isError": true, "content": [{ "type": "text", "text": err }] } }),
+        Ok(text) => {
+            json!({ "jsonrpc": "2.0", "id": id, "result": { "content": [{ "type": "text", "text": text }] } })
+        }
+        Err(err) => {
+            json!({ "jsonrpc": "2.0", "id": id, "result": { "isError": true, "content": [{ "type": "text", "text": err }] } })
+        }
     }
 }

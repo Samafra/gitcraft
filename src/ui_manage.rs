@@ -18,10 +18,16 @@ fn format_action_date(iso: &str) -> String {
 // Dibuja la pestaña de Pull Requests (listar, crear y hacer merge).
 pub fn render_prs_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
-    if app.selected_repo.is_none() { ui.label(app.i18n.t(lang, "no_repo_selected")); return; }
+    if app.selected_repo.is_none() {
+        ui.label(app.i18n.t(lang, "no_repo_selected"));
+        return;
+    }
 
     ui.horizontal_wrapped(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut app.new_pr_title).hint_text(app.i18n.t(lang, "pr_new_title")));
+        ui.add(
+            egui::TextEdit::singleline(&mut app.new_pr_title)
+                .hint_text(app.i18n.t(lang, "pr_new_title")),
+        );
 
         // Desplegable de Rama origen (head)
         ui.label(app.i18n.t(lang, "pr_head_branch"));
@@ -49,7 +55,13 @@ pub fn render_prs_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Cont
             && !app.new_pr_base.is_empty()
             && app.new_pr_head != app.new_pr_base;
 
-        if ui.add_enabled(can_create, egui::Button::new(app.i18n.t(lang, "pr_create_btn"))).clicked() {
+        if ui
+            .add_enabled(
+                can_create,
+                egui::Button::new(app.i18n.t(lang, "pr_create_btn")),
+            )
+            .clicked()
+        {
             app.trigger_create_pr(ctx.clone());
         }
         if ui.button(app.i18n.t(lang, "refresh_list_btn")).clicked() {
@@ -77,15 +89,28 @@ pub fn render_prs_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Cont
 // Dibuja la pestaña de Issues (listar, crear y cerrar).
 pub fn render_issues_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
-    if app.selected_repo.is_none() { ui.label(app.i18n.t(lang, "no_repo_selected")); return; }
+    if app.selected_repo.is_none() {
+        ui.label(app.i18n.t(lang, "no_repo_selected"));
+        return;
+    }
 
     ui.horizontal_wrapped(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut app.new_issue_title).hint_text(app.i18n.t(lang, "issue_new_title")));
-        ui.add(egui::TextEdit::singleline(&mut app.new_issue_body).hint_text(app.i18n.t(lang, "issue_new_body")));
-        if ui.button(app.i18n.t(lang, "issue_create_btn")).clicked() && !app.new_issue_title.trim().is_empty() {
+        ui.add(
+            egui::TextEdit::singleline(&mut app.new_issue_title)
+                .hint_text(app.i18n.t(lang, "issue_new_title")),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut app.new_issue_body)
+                .hint_text(app.i18n.t(lang, "issue_new_body")),
+        );
+        if ui.button(app.i18n.t(lang, "issue_create_btn")).clicked()
+            && !app.new_issue_title.trim().is_empty()
+        {
             app.trigger_create_issue(ctx.clone());
         }
-        if ui.button(app.i18n.t(lang, "refresh_list_btn")).clicked() { app.load_management(ctx.clone()); }
+        if ui.button(app.i18n.t(lang, "refresh_list_btn")).clicked() {
+            app.load_management(ctx.clone());
+        }
     });
     ui.separator();
 
@@ -93,7 +118,9 @@ pub fn render_issues_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::C
         for issue in app.mgmt_data.issues.clone() {
             egui::Frame::group(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(format!("#{} {}", issue.number, issue.title)).strong());
+                    ui.label(
+                        egui::RichText::new(format!("#{} {}", issue.number, issue.title)).strong(),
+                    );
                     if ui.button(app.i18n.t(lang, "issue_close_btn")).clicked() {
                         app.trigger_close_issue(ctx.clone(), issue.number);
                     }
@@ -122,41 +149,62 @@ pub fn render_actions_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::
         .striped(true)
         .resizable(true)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::initial(75.0).at_least(65.0))   // 1. OK / KO
-        .column(Column::remainder().at_least(150.0))    // 2. Workflow
-        .column(Column::initial(120.0).at_least(90.0))  // 3. Usuario
-        .column(Column::initial(110.0).at_least(85.0))  // 4. Rama
+        .column(Column::initial(75.0).at_least(65.0)) // 1. OK / KO
+        .column(Column::remainder().at_least(150.0)) // 2. Workflow
+        .column(Column::initial(120.0).at_least(90.0)) // 3. Usuario
+        .column(Column::initial(110.0).at_least(85.0)) // 4. Rama
         .column(Column::initial(135.0).at_least(115.0)) // 5. Fecha
-        .column(Column::initial(110.0).at_least(95.0))  // 6. Botón relanzar
+        .column(Column::initial(110.0).at_least(95.0)) // 6. Botón relanzar
         .header(26.0, |mut header| {
-            header.col(|ui| { ui.strong(app.i18n.t(lang, "col_act_status")); });
-            header.col(|ui| { ui.strong(app.i18n.t(lang, "col_act_workflow")); });
-            header.col(|ui| { ui.strong(app.i18n.t(lang, "col_act_user")); });
-            header.col(|ui| { ui.strong(app.i18n.t(lang, "col_act_branch")); });
-            header.col(|ui| { ui.strong(app.i18n.t(lang, "col_act_date")); });
-            header.col(|ui| { ui.strong(app.i18n.t(lang, "col_act_action")); });
+            header.col(|ui| {
+                ui.strong(app.i18n.t(lang, "col_act_status"));
+            });
+            header.col(|ui| {
+                ui.strong(app.i18n.t(lang, "col_act_workflow"));
+            });
+            header.col(|ui| {
+                ui.strong(app.i18n.t(lang, "col_act_user"));
+            });
+            header.col(|ui| {
+                ui.strong(app.i18n.t(lang, "col_act_branch"));
+            });
+            header.col(|ui| {
+                ui.strong(app.i18n.t(lang, "col_act_date"));
+            });
+            header.col(|ui| {
+                ui.strong(app.i18n.t(lang, "col_act_action"));
+            });
         })
         .body(|mut body| {
             for run in app.mgmt_data.runs.clone() {
                 body.row(26.0, |mut row| {
                     // Columna 1: OK / KO con color distintivo
-                    row.col(|ui| {
-                        match run.conclusion.as_deref() {
-                            Some("success") => {
-                                ui.colored_label(egui::Color32::from_rgb(92, 184, 92), egui::RichText::new("OK").strong());
-                            }
-                            Some("failure") | Some("cancelled") | Some("timed_out") => {
-                                ui.colored_label(egui::Color32::from_rgb(217, 83, 79), egui::RichText::new("KO").strong());
-                            }
-                            _ => {
-                                ui.colored_label(egui::Color32::from_rgb(240, 173, 78), egui::RichText::new(&run.status).strong());
-                            }
+                    row.col(|ui| match run.conclusion.as_deref() {
+                        Some("success") => {
+                            ui.colored_label(
+                                egui::Color32::from_rgb(92, 184, 92),
+                                egui::RichText::new("OK").strong(),
+                            );
+                        }
+                        Some("failure") | Some("cancelled") | Some("timed_out") => {
+                            ui.colored_label(
+                                egui::Color32::from_rgb(217, 83, 79),
+                                egui::RichText::new("KO").strong(),
+                            );
+                        }
+                        _ => {
+                            ui.colored_label(
+                                egui::Color32::from_rgb(240, 173, 78),
+                                egui::RichText::new(&run.status).strong(),
+                            );
                         }
                     });
 
                     // Columna 2: Nombre del Workflow
                     row.col(|ui| {
-                        ui.add(egui::Label::new(egui::RichText::new(&run.name).strong()).truncate());
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(&run.name).strong()).truncate(),
+                        );
                     });
 
                     // Columna 3: Usuario que disparó la ejecución
@@ -193,13 +241,28 @@ pub fn render_actions_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::
 // Dibuja la pestaña de Releases (publicar y ver versiones).
 pub fn render_releases_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Context) {
     let lang = app.language;
-    if app.selected_repo.is_none() { ui.label(app.i18n.t(lang, "no_repo_selected")); return; }
+    if app.selected_repo.is_none() {
+        ui.label(app.i18n.t(lang, "no_repo_selected"));
+        return;
+    }
 
     ui.horizontal_wrapped(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut app.new_rel_tag).desired_width(120.0).hint_text(app.i18n.t(lang, "release_tag_hint")));
-        ui.add(egui::TextEdit::singleline(&mut app.new_rel_name).hint_text(app.i18n.t(lang, "release_name_hint")));
-        ui.add(egui::TextEdit::singleline(&mut app.new_rel_body).hint_text(app.i18n.t(lang, "release_notes_hint")));
-        if ui.button(app.i18n.t(lang, "release_create_btn")).clicked() && !app.new_rel_tag.trim().is_empty() {
+        ui.add(
+            egui::TextEdit::singleline(&mut app.new_rel_tag)
+                .desired_width(120.0)
+                .hint_text(app.i18n.t(lang, "release_tag_hint")),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut app.new_rel_name)
+                .hint_text(app.i18n.t(lang, "release_name_hint")),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut app.new_rel_body)
+                .hint_text(app.i18n.t(lang, "release_notes_hint")),
+        );
+        if ui.button(app.i18n.t(lang, "release_create_btn")).clicked()
+            && !app.new_rel_tag.trim().is_empty()
+        {
             app.trigger_create_release(ctx.clone());
         }
     });
@@ -208,8 +271,17 @@ pub fn render_releases_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui:
     egui::ScrollArea::vertical().show(ui, |ui| {
         for rel in app.mgmt_data.releases.clone() {
             egui::Frame::group(ui.style()).show(ui, |ui| {
-                ui.label(egui::RichText::new(format!("🏷 {} - {}", rel.tag_name, rel.name.unwrap_or_default())).strong());
-                if let Some(b) = rel.body { ui.label(egui::RichText::new(b).weak()); }
+                ui.label(
+                    egui::RichText::new(format!(
+                        "🏷 {} - {}",
+                        rel.tag_name,
+                        rel.name.unwrap_or_default()
+                    ))
+                    .strong(),
+                );
+                if let Some(b) = rel.body {
+                    ui.label(egui::RichText::new(b).weak());
+                }
             });
         }
     });

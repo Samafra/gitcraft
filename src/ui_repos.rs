@@ -27,7 +27,8 @@ fn sort_header_button(ui: &mut egui::Ui, label: &str, col: RepoSortColumn, app: 
                 app.repo_sort_asc = !app.repo_sort_asc;
             } else {
                 app.repo_sort_col = col;
-                app.repo_sort_asc = !matches!(col, RepoSortColumn::CreatedAt | RepoSortColumn::UpdatedAt);
+                app.repo_sort_asc =
+                    !matches!(col, RepoSortColumn::CreatedAt | RepoSortColumn::UpdatedAt);
             }
         }
 
@@ -51,7 +52,11 @@ fn sort_header_button(ui: &mut egui::Ui, label: &str, col: RepoSortColumn, app: 
                     egui::pos2(c.x, c.y + 3.0),
                 ]
             };
-            ui.painter().add(egui::Shape::convex_polygon(points, color, egui::Stroke::NONE));
+            ui.painter().add(egui::Shape::convex_polygon(
+                points,
+                color,
+                egui::Stroke::NONE,
+            ));
         }
     });
 }
@@ -113,7 +118,11 @@ pub fn render_repos_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Co
             RepoSortColumn::CreatedAt => a.created_at.cmp(&b.created_at),
             RepoSortColumn::UpdatedAt => a.updated_at.cmp(&b.updated_at),
         };
-        if sort_asc { ord } else { ord.reverse() }
+        if sort_asc {
+            ord
+        } else {
+            ord.reverse()
+        }
     });
 
     // 3. Construimos la tabla de 5 columnas con cabeceras clickables
@@ -122,8 +131,8 @@ pub fn render_repos_tab(app: &mut GitCraftApp, ui: &mut egui::Ui, ctx: &egui::Co
         .resizable(true)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
         .column(Column::initial(220.0).at_least(140.0)) // 1. Nombre repositorio
-        .column(Column::initial(125.0).at_least(95.0))  // 2. Público / Privado
-        .column(Column::remainder().at_least(180.0))    // 3. Descripción
+        .column(Column::initial(125.0).at_least(95.0)) // 2. Público / Privado
+        .column(Column::remainder().at_least(180.0)) // 3. Descripción
         .column(Column::initial(145.0).at_least(115.0)) // 4. Fecha creación
         .column(Column::initial(155.0).at_least(120.0)) // 5. Última modificación
         .header(26.0, |mut header| {

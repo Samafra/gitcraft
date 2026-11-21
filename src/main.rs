@@ -32,14 +32,32 @@ fn main() -> eframe::Result<()> {
         renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
-    eframe::run_native("GitCraft", opts, Box::new(|cc| Ok(Box::new(GitCraftApp::new(cc)))))
+    eframe::run_native(
+        "GitCraft",
+        opts,
+        Box::new(|cc| Ok(Box::new(GitCraftApp::new(cc)))),
+    )
 }
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
     use eframe::wasm_bindgen::JsCast as _;
     wasm_bindgen_futures::spawn_local(async {
-        let canvas = web_sys::window().unwrap().document().unwrap().get_element_by_id("gitcraft_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-        eframe::WebRunner::new().start(canvas, eframe::WebOptions::default(), Box::new(|cc| Ok(Box::new(GitCraftApp::new(cc))))).await.ok();
+        let canvas = web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .get_element_by_id("gitcraft_canvas")
+            .unwrap()
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .unwrap();
+        eframe::WebRunner::new()
+            .start(
+                canvas,
+                eframe::WebOptions::default(),
+                Box::new(|cc| Ok(Box::new(GitCraftApp::new(cc)))),
+            )
+            .await
+            .ok();
     });
 }

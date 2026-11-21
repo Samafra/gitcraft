@@ -6,20 +6,36 @@
 //! Las peticiones llevan marcadores para que una respuesta antigua no cambie otra pantalla.
 
 use crate::github::{fetch_user_and_repos, GitHubRepo, GitHubUser};
-use crate::github_manage::{close_issue, create_issue, create_pr, create_release, fetch_management_data, merge_pr, rerun_workflow, RepoManagementData};
+use crate::github_manage::{
+    close_issue, create_issue, create_pr, create_release, fetch_management_data, merge_pr,
+    rerun_workflow, RepoManagementData,
+};
 use crate::i18n::{I18nManager, Language};
-use crate::repo_ops::{commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content, GitBranch, RepoEntry};
 use crate::mcp_client::{mcp_call_tool, mcp_discover_tools, McpTool, McpTransport};
+use crate::repo_ops::{
+    commit_file_push, create_branch, fetch_branches, fetch_directory, fetch_file_content,
+    GitBranch, RepoEntry,
+};
 use crate::ui_changes::render_changes_tab;
+use crate::ui_manage::{
+    render_actions_tab, render_issues_tab, render_prs_tab, render_releases_tab,
+};
 use crate::ui_mcp::render_mcp_ui;
-use crate::ui_manage::{render_actions_tab, render_issues_tab, render_prs_tab, render_releases_tab};
 use crate::ui_repos::render_repos_tab;
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ActiveTab { Repositories, Changes, PullRequests, Issues, Actions, Releases, Mcp }
+pub enum ActiveTab {
+    Repositories,
+    Changes,
+    PullRequests,
+    Issues,
+    Actions,
+    Releases,
+    Mcp,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RepoSortColumn {
@@ -69,54 +85,95 @@ pub struct GitCraftApp {
     pub dark_mode: bool,
     pub show_mcp_sidebar: bool,
     // El PAT sólo vive en memoria: nunca se serializa en las preferencias de eframe.
-    #[serde(skip)] pub saved_token: String,
-    #[serde(skip)] pub i18n: I18nManager,
-    #[serde(skip)] pub is_loading: bool,
-    #[serde(skip)] pub status_notice: Option<(String, bool)>,
-    #[serde(skip)] pub user: Option<GitHubUser>,
-    #[serde(skip)] pub repos: Vec<GitHubRepo>,
-    #[serde(skip)] pub selected_repo: Option<GitHubRepo>,
-    #[serde(skip)] pub repo_filter: String,
+    #[serde(skip)]
+    pub saved_token: String,
+    #[serde(skip)]
+    pub i18n: I18nManager,
+    #[serde(skip)]
+    pub is_loading: bool,
+    #[serde(skip)]
+    pub status_notice: Option<(String, bool)>,
+    #[serde(skip)]
+    pub user: Option<GitHubUser>,
+    #[serde(skip)]
+    pub repos: Vec<GitHubRepo>,
+    #[serde(skip)]
+    pub selected_repo: Option<GitHubRepo>,
+    #[serde(skip)]
+    pub repo_filter: String,
     pub repo_sort_col: RepoSortColumn,
     pub repo_sort_asc: bool,
-    #[serde(skip)] pub branches: Vec<GitBranch>,
-    #[serde(skip)] pub current_branch: String,
-    #[serde(skip)] pub new_branch_name: String,
-    #[serde(skip)] pub current_path: String,
-    #[serde(skip)] pub dir_entries: Vec<RepoEntry>,
-    #[serde(skip)] pub opened_file_path: Option<String>,
-    #[serde(skip)] pub opened_file_sha: String,
-    #[serde(skip)] pub opened_file_content: String,
-    #[serde(skip)] pub commit_message: String,
-    #[serde(skip)] pub mgmt_data: RepoManagementData,
-    #[serde(skip)] pub new_pr_title: String,
-    #[serde(skip)] pub new_pr_head: String,
-    #[serde(skip)] pub new_pr_base: String,
-    #[serde(skip)] pub new_issue_title: String,
-    #[serde(skip)] pub new_issue_body: String,
-    #[serde(skip)] pub new_rel_tag: String,
-    #[serde(skip)] pub new_rel_name: String,
-    #[serde(skip)] pub new_rel_body: String,
+    #[serde(skip)]
+    pub branches: Vec<GitBranch>,
+    #[serde(skip)]
+    pub current_branch: String,
+    #[serde(skip)]
+    pub new_branch_name: String,
+    #[serde(skip)]
+    pub current_path: String,
+    #[serde(skip)]
+    pub dir_entries: Vec<RepoEntry>,
+    #[serde(skip)]
+    pub opened_file_path: Option<String>,
+    #[serde(skip)]
+    pub opened_file_sha: String,
+    #[serde(skip)]
+    pub opened_file_content: String,
+    #[serde(skip)]
+    pub commit_message: String,
+    #[serde(skip)]
+    pub mgmt_data: RepoManagementData,
+    #[serde(skip)]
+    pub new_pr_title: String,
+    #[serde(skip)]
+    pub new_pr_head: String,
+    #[serde(skip)]
+    pub new_pr_base: String,
+    #[serde(skip)]
+    pub new_issue_title: String,
+    #[serde(skip)]
+    pub new_issue_body: String,
+    #[serde(skip)]
+    pub new_rel_tag: String,
+    #[serde(skip)]
+    pub new_rel_name: String,
+    #[serde(skip)]
+    pub new_rel_body: String,
     pub mcp_transport: McpTransport,
     pub mcp_endpoint: String,
     // Permiso temporal, por dirección exacta, para transmitir el PAT a un proceso MCP.
     // Nunca se guarda en disco ni se conserva tras reiniciar la aplicación.
-    #[serde(skip)] pub mcp_token_authorized_endpoint: Option<String>,
-    #[serde(skip)] pub mcp_tools: Vec<McpTool>,
-    #[serde(skip)] pub mcp_selected_tool: String,
-    #[serde(skip)] pub mcp_tool_args: String,
-    #[serde(skip)] pub mcp_last_output: String,
+    #[serde(skip)]
+    pub mcp_token_authorized_endpoint: Option<String>,
+    #[serde(skip)]
+    pub mcp_tools: Vec<McpTool>,
+    #[serde(skip)]
+    pub mcp_selected_tool: String,
+    #[serde(skip)]
+    pub mcp_tool_args: String,
+    #[serde(skip)]
+    pub mcp_last_output: String,
     // Identificadores de las peticiones más recientes; pertenecen sólo a esta sesión.
-    #[serde(skip)] pub request_generation: u64,
-    #[serde(skip)] pub auth_generation: u64,
-    #[serde(skip)] pub branches_request: Option<RepoRequestKey>,
-    #[serde(skip)] pub directory_request: Option<RepoRequestKey>,
-    #[serde(skip)] pub file_request: Option<RepoRequestKey>,
-    #[serde(skip)] pub commit_request: Option<RepoRequestKey>,
-    #[serde(skip)] pub branch_create_request: Option<RepoRequestKey>,
-    #[serde(skip)] pub management_request: Option<RepoRequestKey>,
-    #[serde(skip)] tx: Option<Sender<AsyncEvent>>,
-    #[serde(skip)] rx: Option<Receiver<AsyncEvent>>,
+    #[serde(skip)]
+    pub request_generation: u64,
+    #[serde(skip)]
+    pub auth_generation: u64,
+    #[serde(skip)]
+    pub branches_request: Option<RepoRequestKey>,
+    #[serde(skip)]
+    pub directory_request: Option<RepoRequestKey>,
+    #[serde(skip)]
+    pub file_request: Option<RepoRequestKey>,
+    #[serde(skip)]
+    pub commit_request: Option<RepoRequestKey>,
+    #[serde(skip)]
+    pub branch_create_request: Option<RepoRequestKey>,
+    #[serde(skip)]
+    pub management_request: Option<RepoRequestKey>,
+    #[serde(skip)]
+    tx: Option<Sender<AsyncEvent>>,
+    #[serde(skip)]
+    rx: Option<Receiver<AsyncEvent>>,
 }
 
 /// Construye un estado inicial sin conexión y con permisos MCP desactivados.
@@ -124,21 +181,55 @@ impl Default for GitCraftApp {
     fn default() -> Self {
         let (tx, rx) = channel();
         Self {
-            language: Language::Es, active_tab: ActiveTab::Repositories, dark_mode: true, show_mcp_sidebar: true,
-            saved_token: String::new(), i18n: I18nManager::default(), is_loading: false, status_notice: None,
-            user: None, repos: Vec::new(), selected_repo: None, repo_filter: String::new(), repo_sort_col: RepoSortColumn::UpdatedAt, repo_sort_asc: false,
-            branches: Vec::new(), current_branch: "main".into(), new_branch_name: String::new(),
-            current_path: String::new(), dir_entries: Vec::new(), opened_file_path: None,
-            opened_file_sha: String::new(), opened_file_content: String::new(), commit_message: String::new(),
-            mgmt_data: RepoManagementData::default(), new_pr_title: String::new(), new_pr_head: String::new(), new_pr_base: "main".into(),
-            new_issue_title: String::new(), new_issue_body: String::new(), new_rel_tag: String::new(), new_rel_name: String::new(), new_rel_body: String::new(),
-            mcp_transport: McpTransport::Stdio, mcp_endpoint: "npx -y @modelcontextprotocol/server-github".into(),
+            language: Language::Es,
+            active_tab: ActiveTab::Repositories,
+            dark_mode: true,
+            show_mcp_sidebar: true,
+            saved_token: String::new(),
+            i18n: I18nManager::default(),
+            is_loading: false,
+            status_notice: None,
+            user: None,
+            repos: Vec::new(),
+            selected_repo: None,
+            repo_filter: String::new(),
+            repo_sort_col: RepoSortColumn::UpdatedAt,
+            repo_sort_asc: false,
+            branches: Vec::new(),
+            current_branch: "main".into(),
+            new_branch_name: String::new(),
+            current_path: String::new(),
+            dir_entries: Vec::new(),
+            opened_file_path: None,
+            opened_file_sha: String::new(),
+            opened_file_content: String::new(),
+            commit_message: String::new(),
+            mgmt_data: RepoManagementData::default(),
+            new_pr_title: String::new(),
+            new_pr_head: String::new(),
+            new_pr_base: "main".into(),
+            new_issue_title: String::new(),
+            new_issue_body: String::new(),
+            new_rel_tag: String::new(),
+            new_rel_name: String::new(),
+            new_rel_body: String::new(),
+            mcp_transport: McpTransport::Stdio,
+            mcp_endpoint: "npx -y @modelcontextprotocol/server-github".into(),
             mcp_token_authorized_endpoint: None,
-            mcp_tools: Vec::new(), mcp_selected_tool: String::new(), mcp_tool_args: "{}".into(), mcp_last_output: String::new(),
-            request_generation: 0, auth_generation: 0, branches_request: None,
-            directory_request: None, file_request: None, commit_request: None,
-            branch_create_request: None, management_request: None,
-            tx: Some(tx), rx: Some(rx),
+            mcp_tools: Vec::new(),
+            mcp_selected_tool: String::new(),
+            mcp_tool_args: "{}".into(),
+            mcp_last_output: String::new(),
+            request_generation: 0,
+            auth_generation: 0,
+            branches_request: None,
+            directory_request: None,
+            file_request: None,
+            commit_request: None,
+            branch_create_request: None,
+            management_request: None,
+            tx: Some(tx),
+            rx: Some(rx),
         }
     }
 }
@@ -148,7 +239,10 @@ fn spawn_task<F>(ctx: egui::Context, fut: F)
 where
     F: std::future::Future<Output = ()> + Send + 'static,
 {
-    std::thread::spawn(move || { tokio::runtime::Runtime::new().unwrap().block_on(fut); ctx.request_repaint(); });
+    std::thread::spawn(move || {
+        tokio::runtime::Runtime::new().unwrap().block_on(fut);
+        ctx.request_repaint();
+    });
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -156,19 +250,36 @@ fn spawn_task<F>(ctx: egui::Context, fut: F)
 where
     F: std::future::Future<Output = ()> + 'static,
 {
-    wasm_bindgen_futures::spawn_local(async move { fut.await; ctx.request_repaint(); });
+    wasm_bindgen_futures::spawn_local(async move {
+        fut.await;
+        ctx.request_repaint();
+    });
 }
 
 impl GitCraftApp {
     /// Restaura preferencias al abrir la aplicación, pero nunca recupera el token antiguo.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        let mut app: Self = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
-        let (tx, rx) = channel(); app.tx = Some(tx); app.rx = Some(rx); app.apply_theme(&cc.egui_ctx);
-        if !app.saved_token.trim().is_empty() { app.trigger_github_sync(cc.egui_ctx.clone()); }
+        let mut app: Self = cc
+            .storage
+            .and_then(|s| eframe::get_value(s, eframe::APP_KEY))
+            .unwrap_or_default();
+        let (tx, rx) = channel();
+        app.tx = Some(tx);
+        app.rx = Some(rx);
+        app.apply_theme(&cc.egui_ctx);
+        if !app.saved_token.trim().is_empty() {
+            app.trigger_github_sync(cc.egui_ctx.clone());
+        }
         app
     }
     /// Ajusta colores claros u oscuros de todos los controles de la aplicación.
-    fn apply_theme(&self, ctx: &egui::Context) { ctx.set_visuals(if self.dark_mode { egui::Visuals::dark() } else { egui::Visuals::light() }); }
+    fn apply_theme(&self, ctx: &egui::Context) {
+        ctx.set_visuals(if self.dark_mode {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        });
+    }
     /// Genera un marcador único para una nueva petición a GitHub.
     /// El contador se incrementa para que una respuesta anterior nunca suplante a la última.
     fn new_repo_request(&mut self, repo: &str, branch: &str, path: &str) -> RepoRequestKey {
@@ -183,9 +294,17 @@ impl GitCraftApp {
 
     /// Comprueba que la respuesta corresponde tanto al repositorio seleccionado
     /// como al marcador de la petición más reciente de esa clase.
-    fn is_current_repo_request(&self, latest: &Option<RepoRequestKey>, key: &RepoRequestKey) -> bool {
+    fn is_current_repo_request(
+        &self,
+        latest: &Option<RepoRequestKey>,
+        key: &RepoRequestKey,
+    ) -> bool {
         latest.as_ref() == Some(key)
-            && self.selected_repo.as_ref().map(|repo| repo.full_name.as_str()) == Some(key.repo.as_str())
+            && self
+                .selected_repo
+                .as_ref()
+                .map(|repo| repo.full_name.as_str())
+                == Some(key.repo.as_str())
     }
 
     /// Cierra la sesión, borra el PAT en memoria e invalida respuestas pendientes.
@@ -226,7 +345,9 @@ impl GitCraftApp {
     /// Cambia a la rama inicial de un repositorio recién seleccionado y carga sus datos.
     /// Esta función SÍ selecciona la rama predeterminada, pero no debe usarse para refrescar.
     pub fn load_branches_and_root(&mut self, ctx: egui::Context) {
-        let Some(repo) = &self.selected_repo else { return };
+        let Some(repo) = &self.selected_repo else {
+            return;
+        };
         self.current_branch = repo.default_branch.clone();
         self.new_pr_base = repo.default_branch.clone();
         self.current_path.clear();
@@ -245,7 +366,9 @@ impl GitCraftApp {
 
     /// Vuelve a leer las ramas sin cambiar la rama actualmente seleccionada.
     pub fn refresh_branches(&mut self, ctx: egui::Context) {
-        let Some(repo) = &self.selected_repo else { return };
+        let Some(repo) = &self.selected_repo else {
+            return;
+        };
         let name = repo.full_name.clone();
         let token = self.saved_token.clone();
         let tx = self.tx.clone().unwrap();
@@ -259,7 +382,9 @@ impl GitCraftApp {
 
     /// Lee una carpeta de la rama seleccionada y marca qué petición sigue vigente.
     pub fn load_directory(&mut self, ctx: egui::Context) {
-        let Some(repo) = &self.selected_repo else { return };
+        let Some(repo) = &self.selected_repo else {
+            return;
+        };
         let name = repo.full_name.clone();
         let branch = self.current_branch.clone();
         let path = self.current_path.clone();
@@ -277,7 +402,9 @@ impl GitCraftApp {
 
     /// Abre un archivo remoto; las respuestas de archivos anteriores se descartan.
     pub fn open_file(&mut self, ctx: egui::Context, path: String) {
-        let Some(repo) = &self.selected_repo else { return };
+        let Some(repo) = &self.selected_repo else {
+            return;
+        };
         let name = repo.full_name.clone();
         let branch = self.current_branch.clone();
         let token = self.saved_token.clone();
@@ -293,8 +420,12 @@ impl GitCraftApp {
     /// Crea una rama en GitHub conservando su nombre y repositorio originales.
     /// Aunque el usuario cambie de repositorio antes de terminar, no se modificará el actual.
     pub fn trigger_create_branch(&mut self, ctx: egui::Context) {
-        let Some(repo) = &self.selected_repo else { return };
-        let sha = self.branches.iter()
+        let Some(repo) = &self.selected_repo else {
+            return;
+        };
+        let sha = self
+            .branches
+            .iter()
             .find(|branch| branch.name == self.current_branch)
             .map(|branch| branch.commit.sha.clone())
             .unwrap_or_default();
@@ -322,7 +453,9 @@ impl GitCraftApp {
 
     /// Publica un archivo remoto; el SHA resultante sólo se aplica al editor original.
     pub fn trigger_commit_push(&mut self, ctx: egui::Context) {
-        let (Some(repo), Some(path)) = (&self.selected_repo, &self.opened_file_path) else { return };
+        let (Some(repo), Some(path)) = (&self.selected_repo, &self.opened_file_path) else {
+            return;
+        };
         let msg = if self.commit_message.trim().is_empty() {
             format!("Update {}", path)
         } else {
@@ -344,7 +477,9 @@ impl GitCraftApp {
 
     /// Recupera los datos de gestión remota, asociando la respuesta al repositorio correcto.
     pub fn load_management(&mut self, ctx: egui::Context) {
-        let Some(repo) = &self.selected_repo else { return };
+        let Some(repo) = &self.selected_repo else {
+            return;
+        };
         let name = repo.full_name.clone();
         let token = self.saved_token.clone();
         let tx = self.tx.clone().unwrap();
@@ -358,7 +493,14 @@ impl GitCraftApp {
     /// Crea un Pull Request en GitHub con las ramas y título indicados en pantalla.
     pub fn trigger_create_pr(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
-        let (t, f, ti, h, b, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_pr_title.clone(), self.new_pr_head.clone(), self.new_pr_base.clone(), self.tx.clone().unwrap());
+        let (t, f, ti, h, b, tx) = (
+            self.saved_token.clone(),
+            r.full_name.clone(),
+            self.new_pr_title.clone(),
+            self.new_pr_head.clone(),
+            self.new_pr_base.clone(),
+            self.tx.clone().unwrap(),
+        );
         self.new_pr_title.clear();
         spawn_task(ctx, async move {
             let repo_name = f.clone();
@@ -369,7 +511,11 @@ impl GitCraftApp {
     /// Fusiona un Pull Request por su número utilizando la API de GitHub.
     pub fn trigger_merge_pr(&mut self, ctx: egui::Context, num: u64) {
         let Some(r) = &self.selected_repo else { return };
-        let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
+        let (t, f, tx) = (
+            self.saved_token.clone(),
+            r.full_name.clone(),
+            self.tx.clone().unwrap(),
+        );
         spawn_task(ctx, async move {
             let repo_name = f.clone();
             let result = merge_pr(t, f, num).await;
@@ -379,8 +525,15 @@ impl GitCraftApp {
     /// Envía un Issue nuevo a GitHub y gestiona su respuesta asíncrona.
     pub fn trigger_create_issue(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
-        let (t, f, ti, bo, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_issue_title.clone(), self.new_issue_body.clone(), self.tx.clone().unwrap());
-        self.new_issue_title.clear(); self.new_issue_body.clear();
+        let (t, f, ti, bo, tx) = (
+            self.saved_token.clone(),
+            r.full_name.clone(),
+            self.new_issue_title.clone(),
+            self.new_issue_body.clone(),
+            self.tx.clone().unwrap(),
+        );
+        self.new_issue_title.clear();
+        self.new_issue_body.clear();
         spawn_task(ctx, async move {
             let repo_name = f.clone();
             let result = create_issue(t, f, ti, bo).await;
@@ -390,7 +543,11 @@ impl GitCraftApp {
     /// Cierra un Issue existente por su número; no borra su historial.
     pub fn trigger_close_issue(&mut self, ctx: egui::Context, num: u64) {
         let Some(r) = &self.selected_repo else { return };
-        let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
+        let (t, f, tx) = (
+            self.saved_token.clone(),
+            r.full_name.clone(),
+            self.tx.clone().unwrap(),
+        );
         spawn_task(ctx, async move {
             let repo_name = f.clone();
             let result = close_issue(t, f, num).await;
@@ -401,7 +558,11 @@ impl GitCraftApp {
     /// No se utiliza para las pruebas ni los despliegues de este proyecto.
     pub fn trigger_rerun_workflow(&mut self, ctx: egui::Context, id: u64) {
         let Some(r) = &self.selected_repo else { return };
-        let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
+        let (t, f, tx) = (
+            self.saved_token.clone(),
+            r.full_name.clone(),
+            self.tx.clone().unwrap(),
+        );
         spawn_task(ctx, async move {
             let repo_name = f.clone();
             let result = rerun_workflow(t, f, id).await;
@@ -418,28 +579,61 @@ impl GitCraftApp {
     /// Devuelve el token sólo cuando existe consentimiento explícito para este servidor.
     /// Para cualquier servidor no autorizado se devuelve una cadena vacía.
     fn token_for_mcp(&self) -> String {
-        if self.mcp_token_is_authorized() { self.saved_token.clone() } else { String::new() }
+        if self.mcp_token_is_authorized() {
+            self.saved_token.clone()
+        } else {
+            String::new()
+        }
     }
 
     /// Consulta las herramientas expuestas por el servidor MCP elegido en la interfaz.
     /// Sólo entrega credenciales si se autorizaron explícitamente.
     pub fn trigger_mcp_discover(&mut self, ctx: egui::Context) {
         self.is_loading = true;
-        let (tr, ep, tok, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.token_for_mcp(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::McpToolsLoaded(mcp_discover_tools(tr, ep, tok).await)); });
+        let (tr, ep, tok, tx) = (
+            self.mcp_transport,
+            self.mcp_endpoint.clone(),
+            self.token_for_mcp(),
+            self.tx.clone().unwrap(),
+        );
+        spawn_task(ctx, async move {
+            let _ = tx.send(AsyncEvent::McpToolsLoaded(
+                mcp_discover_tools(tr, ep, tok).await,
+            ));
+        });
     }
     /// Ejecuta una herramienta MCP seleccionada con sus argumentos JSON.
     /// El proceso que recibe el token debe contar con permiso explícito.
     pub fn trigger_mcp_call(&mut self, ctx: egui::Context) {
         self.is_loading = true;
-        let (tr, ep, tok, tool, args, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.token_for_mcp(), self.mcp_selected_tool.clone(), self.mcp_tool_args.clone(), self.tx.clone().unwrap());
-        spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::McpCallResult(mcp_call_tool(tr, ep, tok, tool, args).await)); });
+        let (tr, ep, tok, tool, args, tx) = (
+            self.mcp_transport,
+            self.mcp_endpoint.clone(),
+            self.token_for_mcp(),
+            self.mcp_selected_tool.clone(),
+            self.mcp_tool_args.clone(),
+            self.tx.clone().unwrap(),
+        );
+        spawn_task(ctx, async move {
+            let _ = tx.send(AsyncEvent::McpCallResult(
+                mcp_call_tool(tr, ep, tok, tool, args).await,
+            ));
+        });
     }
     /// Solicita publicar una Release en GitHub; esta operación es distinta de crear un tag Git local.
     pub fn trigger_create_release(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
-        let (t, f, tg, nm, bo, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_rel_tag.clone(), self.new_rel_name.clone(), self.new_rel_body.clone(), self.tx.clone().unwrap());
-        self.new_rel_tag.clear(); self.new_rel_name.clear(); self.new_rel_body.clear();
+        let (t, f, tg, nm, bo, tx) = (
+            self.saved_token.clone(),
+            r.full_name.clone(),
+            self.new_rel_tag.clone(),
+            self.new_rel_name.clone(),
+            self.new_rel_body.clone(),
+            self.tx.clone().unwrap(),
+        );
+        self.new_rel_tag.clear();
+        self.new_rel_name.clear();
+        self.new_rel_body.clear();
         spawn_task(ctx, async move {
             let repo_name = f.clone();
             let result = create_release(t, f, tg, nm, bo).await;
@@ -451,19 +645,27 @@ impl GitCraftApp {
 /// Integración con `eframe`: guarda preferencias y actualiza la pantalla en cada ciclo.
 impl eframe::App for GitCraftApp {
     /// Escribe las preferencias permitidas; gracias a `serde(skip)` no escribe el PAT.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) { eframe::set_value(storage, eframe::APP_KEY, self); }
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
+    }
 
     /// Atiende respuestas pendientes y dibuja las pestañas actuales.
     /// `&mut self` permite cambiar el estado y `ctx` solicita repintar la interfaz.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let mut pending = Vec::new();
-        if let Some(rx) = &self.rx { while let Ok(ev) = rx.try_recv() { pending.push(ev); } }
+        if let Some(rx) = &self.rx {
+            while let Ok(ev) = rx.try_recv() {
+                pending.push(ev);
+            }
+        }
         for ev in pending {
             self.is_loading = false;
             match ev {
                 // Un login antiguo ya no puede restaurar una sesión cerrada.
                 AsyncEvent::UserAndRepos(generation, result) => {
-                    if generation != self.auth_generation { continue; }
+                    if generation != self.auth_generation {
+                        continue;
+                    }
                     match result {
                         Ok((user, repos)) => {
                             self.user = Some(user);
@@ -475,16 +677,22 @@ impl eframe::App for GitCraftApp {
                 }
                 // Sólo se aplican las ramas de la petición vigente para el repo visible.
                 AsyncEvent::Branches(key, result) => {
-                    if !self.is_current_repo_request(&self.branches_request, &key) { continue; }
+                    if !self.is_current_repo_request(&self.branches_request, &key) {
+                        continue;
+                    }
                     match result {
                         Ok(branches) => {
                             if self.new_pr_head.is_empty()
-                                || !branches.iter().any(|branch| branch.name == self.new_pr_head)
+                                || !branches
+                                    .iter()
+                                    .any(|branch| branch.name == self.new_pr_head)
                             {
-                                self.new_pr_head = branches.iter()
+                                self.new_pr_head = branches
+                                    .iter()
                                     .find(|branch| branch.name != self.new_pr_base)
                                     .or_else(|| branches.first())
-                                    .map(|branch| branch.name.clone()).unwrap_or_default();
+                                    .map(|branch| branch.name.clone())
+                                    .unwrap_or_default();
                             }
                             self.branches = branches;
                         }
@@ -494,8 +702,11 @@ impl eframe::App for GitCraftApp {
                 // Además del repo, la carpeta y la rama deben seguir siendo las mismas.
                 AsyncEvent::Directory(key, result) => {
                     if !self.is_current_repo_request(&self.directory_request, &key)
-                        || self.current_branch != key.branch || self.current_path != key.path
-                    { continue; }
+                        || self.current_branch != key.branch
+                        || self.current_path != key.path
+                    {
+                        continue;
+                    }
                     match result {
                         Ok(directory) => self.dir_entries = directory,
                         Err(error) => self.status_notice = Some((error, true)),
@@ -505,7 +716,9 @@ impl eframe::App for GitCraftApp {
                 AsyncEvent::FileLoaded(key, result) => {
                     if !self.is_current_repo_request(&self.file_request, &key)
                         || self.current_branch != key.branch
-                    { continue; }
+                    {
+                        continue;
+                    }
                     match result {
                         Ok((content, sha)) => {
                             self.opened_file_path = Some(key.path);
@@ -516,26 +729,31 @@ impl eframe::App for GitCraftApp {
                     }
                 }
                 // El commit puede terminar después de que el usuario navegue a otro sitio.
-                AsyncEvent::CommitDone(key, result) => {
-                    match result {
-                        Ok(sha) => {
-                            if self.is_current_repo_request(&self.commit_request, &key)
-                                && self.current_branch == key.branch
-                                && self.opened_file_path.as_deref() == Some(key.path.as_str())
-                            {
-                                self.opened_file_sha = sha;
-                                self.commit_message.clear();
-                            }
-                            self.status_notice = Some((format!("Commit & Push terminado en {} ({})", key.repo, key.branch), false));
+                AsyncEvent::CommitDone(key, result) => match result {
+                    Ok(sha) => {
+                        if self.is_current_repo_request(&self.commit_request, &key)
+                            && self.current_branch == key.branch
+                            && self.opened_file_path.as_deref() == Some(key.path.as_str())
+                        {
+                            self.opened_file_sha = sha;
+                            self.commit_message.clear();
                         }
-                        Err(error) => self.status_notice = Some((format!("{}: {}", key.repo, error), true)),
+                        self.status_notice = Some((
+                            format!("Commit & Push terminado en {} ({})", key.repo, key.branch),
+                            false,
+                        ));
                     }
-                }
+                    Err(error) => {
+                        self.status_notice = Some((format!("{}: {}", key.repo, error), true))
+                    }
+                },
                 // El nombre creado se obtiene de la solicitud original, no del cuadro editable.
                 AsyncEvent::BranchCreated(key, result) => {
                     // Dos creaciones consecutivas pueden terminar en distinto orden;
                     // sólo la última solicitud debe seleccionar una rama en pantalla.
-                    if !self.is_current_repo_request(&self.branch_create_request, &key) { continue; }
+                    if !self.is_current_repo_request(&self.branch_create_request, &key) {
+                        continue;
+                    }
                     match result {
                         Ok(()) => {
                             self.select_created_branch(&key.path);
@@ -543,32 +761,43 @@ impl eframe::App for GitCraftApp {
                             self.refresh_branches(ctx.clone());
                             self.load_directory(ctx.clone());
                         }
-                        Err(error) => self.status_notice = Some((format!("{}: {}", key.repo, error), true)),
+                        Err(error) => {
+                            self.status_notice = Some((format!("{}: {}", key.repo, error), true))
+                        }
                     }
                 }
                 AsyncEvent::ManagementLoaded(key, result) => {
-                    if !self.is_current_repo_request(&self.management_request, &key) { continue; }
+                    if !self.is_current_repo_request(&self.management_request, &key) {
+                        continue;
+                    }
                     match result {
                         Ok(data) => self.mgmt_data = data,
                         Err(error) => self.status_notice = Some((error, true)),
                     }
                 }
                 // Una acción terminada para otro repo no recarga los datos del repo actual.
-                AsyncEvent::MgmtActionDone(repo, result) => {
-                    match result {
-                        Ok(()) => {
-                            if self.selected_repo.as_ref().map(|selected| selected.full_name.as_str()) == Some(repo.as_str()) {
-                                self.load_management(ctx.clone());
-                            }
+                AsyncEvent::MgmtActionDone(repo, result) => match result {
+                    Ok(()) => {
+                        if self
+                            .selected_repo
+                            .as_ref()
+                            .map(|selected| selected.full_name.as_str())
+                            == Some(repo.as_str())
+                        {
+                            self.load_management(ctx.clone());
                         }
-                        Err(error) => self.status_notice = Some((format!("{}: {}", repo, error), true)),
                     }
-                }
+                    Err(error) => self.status_notice = Some((format!("{}: {}", repo, error), true)),
+                },
                 AsyncEvent::McpToolsLoaded(Ok(tools)) => {
-                    if let Some(first) = tools.first() { self.mcp_selected_tool = first.name.clone(); }
+                    if let Some(first) = tools.first() {
+                        self.mcp_selected_tool = first.name.clone();
+                    }
                     self.mcp_tools = tools;
                 }
-                AsyncEvent::McpCallResult(Ok(out)) => { self.mcp_last_output = out; }
+                AsyncEvent::McpCallResult(Ok(out)) => {
+                    self.mcp_last_output = out;
+                }
                 AsyncEvent::McpToolsLoaded(Err(error)) | AsyncEvent::McpCallResult(Err(error)) => {
                     self.status_notice = Some((error, true));
                 }
@@ -580,46 +809,112 @@ impl eframe::App for GitCraftApp {
             ui.horizontal(|ui| {
                 ui.heading("🦀 GitCraft");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    egui::ComboBox::from_id_salt("lang").selected_text(lang.label()).show_ui(ui, |ui| {
-                        for l in Language::all() { ui.selectable_value(&mut self.language, *l, l.label()); }
-                    });
-                    if ui.button(if self.dark_mode { "☀" } else { "🌙" }).clicked() { self.dark_mode = !self.dark_mode; self.apply_theme(ctx); }
-                    if ui.selectable_label(self.show_mcp_sidebar, "🤖 MCP").clicked() { self.show_mcp_sidebar = !self.show_mcp_sidebar; }
+                    egui::ComboBox::from_id_salt("lang")
+                        .selected_text(lang.label())
+                        .show_ui(ui, |ui| {
+                            for l in Language::all() {
+                                ui.selectable_value(&mut self.language, *l, l.label());
+                            }
+                        });
+                    if ui.button(if self.dark_mode { "☀" } else { "🌙" }).clicked() {
+                        self.dark_mode = !self.dark_mode;
+                        self.apply_theme(ctx);
+                    }
+                    if ui
+                        .selectable_label(self.show_mcp_sidebar, "🤖 MCP")
+                        .clicked()
+                    {
+                        self.show_mcp_sidebar = !self.show_mcp_sidebar;
+                    }
                 });
             });
             ui.horizontal_wrapped(|ui| {
-                ui.selectable_value(&mut self.active_tab, ActiveTab::Repositories, self.i18n.t(lang, "tab_repos"));
-                ui.selectable_value(&mut self.active_tab, ActiveTab::Changes, self.i18n.t(lang, "tab_changes"));
-                ui.selectable_value(&mut self.active_tab, ActiveTab::PullRequests, self.i18n.t(lang, "tab_prs"));
-                ui.selectable_value(&mut self.active_tab, ActiveTab::Issues, self.i18n.t(lang, "tab_issues"));
-                ui.selectable_value(&mut self.active_tab, ActiveTab::Actions, self.i18n.t(lang, "tab_actions"));
-                ui.selectable_value(&mut self.active_tab, ActiveTab::Releases, self.i18n.t(lang, "tab_releases"));
-                ui.selectable_value(&mut self.active_tab, ActiveTab::Mcp, self.i18n.t(lang, "tab_mcp"));
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::Repositories,
+                    self.i18n.t(lang, "tab_repos"),
+                );
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::Changes,
+                    self.i18n.t(lang, "tab_changes"),
+                );
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::PullRequests,
+                    self.i18n.t(lang, "tab_prs"),
+                );
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::Issues,
+                    self.i18n.t(lang, "tab_issues"),
+                );
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::Actions,
+                    self.i18n.t(lang, "tab_actions"),
+                );
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::Releases,
+                    self.i18n.t(lang, "tab_releases"),
+                );
+                ui.selectable_value(
+                    &mut self.active_tab,
+                    ActiveTab::Mcp,
+                    self.i18n.t(lang, "tab_mcp"),
+                );
             });
         });
 
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if let Some(r) = &self.selected_repo { ui.label(format!("{} {} ({})", self.i18n.t(lang, "active_repo_label"), r.full_name, self.current_branch)); }
-                if let Some((msg, is_err)) = &self.status_notice { ui.colored_label(if *is_err { egui::Color32::LIGHT_RED } else { egui::Color32::LIGHT_GREEN }, msg); }
+                if let Some(r) = &self.selected_repo {
+                    ui.label(format!(
+                        "{} {} ({})",
+                        self.i18n.t(lang, "active_repo_label"),
+                        r.full_name,
+                        self.current_branch
+                    ));
+                }
+                if let Some((msg, is_err)) = &self.status_notice {
+                    ui.colored_label(
+                        if *is_err {
+                            egui::Color32::LIGHT_RED
+                        } else {
+                            egui::Color32::LIGHT_GREEN
+                        },
+                        msg,
+                    );
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if let Some(u) = &self.user { ui.colored_label(egui::Color32::LIGHT_GREEN, format!("@{} ", u.login)); }
+                    if let Some(u) = &self.user {
+                        ui.colored_label(egui::Color32::LIGHT_GREEN, format!("@{} ", u.login));
+                    }
                 });
             });
         });
 
         if self.show_mcp_sidebar {
-            egui::SidePanel::right("mcp_panel").default_width(250.0).show(ctx, |ui| {
-                render_mcp_ui(self, ui, ctx);
-            });
+            egui::SidePanel::right("mcp_panel")
+                .default_width(250.0)
+                .show(ctx, |ui| {
+                    render_mcp_ui(self, ui, ctx);
+                });
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.user.is_none() {
                 ui.heading(self.i18n.t(lang, "welcome_title"));
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.saved_token).password(true).hint_text("ghp_xxxx"));
-                    if ui.button(self.i18n.t(lang, "auth_connect_btn")).clicked() { self.trigger_github_sync(ctx.clone()); }
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.saved_token)
+                            .password(true)
+                            .hint_text("ghp_xxxx"),
+                    );
+                    if ui.button(self.i18n.t(lang, "auth_connect_btn")).clicked() {
+                        self.trigger_github_sync(ctx.clone());
+                    }
                 });
                 return;
             }
@@ -650,7 +945,8 @@ mod security_tests {
         assert!(preferences.get("saved_token").is_none());
         // La carga de preferencias antiguas ignora un token que antes pudiera persistirse.
         let old = serde_json::json!({"saved_token":"secreto_antiguo"});
-        let reloaded: GitCraftApp = serde_json::from_value(old).expect("configuración antigua válida");
+        let reloaded: GitCraftApp =
+            serde_json::from_value(old).expect("configuración antigua válida");
         assert!(reloaded.saved_token.is_empty());
     }
 
@@ -658,14 +954,20 @@ mod security_tests {
     #[test]
     fn stale_repo_responses_are_rejected() {
         let mut app = GitCraftApp::default();
-        app.selected_repo = Some(GitHubRepo { full_name: "Samafra/gitcraft".into(), ..Default::default() });
+        app.selected_repo = Some(GitHubRepo {
+            full_name: "Samafra/gitcraft".into(),
+            ..Default::default()
+        });
         let old = app.new_repo_request("Samafra/gitcraft", "main", "src");
         app.directory_request = Some(old.clone());
         assert!(app.is_current_repo_request(&app.directory_request, &old));
         let newest = app.new_repo_request("Samafra/gitcraft", "main", "src");
         app.directory_request = Some(newest);
         assert!(!app.is_current_repo_request(&app.directory_request, &old));
-        app.selected_repo = Some(GitHubRepo { full_name: "Otra/carpeta".into(), ..Default::default() });
+        app.selected_repo = Some(GitHubRepo {
+            full_name: "Otra/carpeta".into(),
+            ..Default::default()
+        });
         assert!(!app.is_current_repo_request(&app.directory_request, &old));
     }
 
