@@ -917,8 +917,7 @@ impl eframe::App for GitCraftApp {
                     self.local_loading = false;
                     match result {
                         Ok(repository) => {
-                            self.local_repo_input =
-                                repository.root.to_string_lossy().into_owned();
+                            self.local_repo_input = repository.root.to_string_lossy().into_owned();
                             self.local_repository = Some(repository);
                             self.local_error = None;
                         }
