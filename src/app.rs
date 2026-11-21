@@ -1,3 +1,10 @@
+//! Controlador principal de GitCraft.
+//!
+//! Conserva la información de las pantallas, coordina peticiones a GitHub y recibe
+//! respuestas de tareas en segundo plano. Cuando Rust muestra `Result<T, String>`,
+//! significa que una operación puede terminar con datos (`Ok`) o con un error (`Err`).
+//! Las peticiones llevan marcadores para que una respuesta antigua no cambie otra pantalla.
+
 use crate::github::{fetch_user_and_repos, GitHubRepo, GitHubUser};
 use crate::github_manage::{close_issue, create_issue, create_pr, create_release, fetch_management_data, merge_pr, rerun_workflow, RepoManagementData};
 use crate::i18n::{I18nManager, Language};
@@ -52,6 +59,8 @@ pub enum AsyncEvent {
     McpCallResult(Result<String, String>),
 }
 
+/// Estado general de GitCraft: preferencias, sesión y datos que utiliza la interfaz.
+/// `serde` guarda sólo las preferencias autorizadas; los campos con `skip` no se persisten.
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct GitCraftApp {
@@ -110,6 +119,7 @@ pub struct GitCraftApp {
     #[serde(skip)] rx: Option<Receiver<AsyncEvent>>,
 }
 
+/// Construye un estado inicial sin conexión y con permisos MCP desactivados.
 impl Default for GitCraftApp {
     fn default() -> Self {
         let (tx, rx) = channel();
@@ -150,12 +160,14 @@ where
 }
 
 impl GitCraftApp {
+    /// Restaura preferencias al abrir la aplicación, pero nunca recupera el token antiguo.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut app: Self = cc.storage.and_then(|s| eframe::get_value(s, eframe::APP_KEY)).unwrap_or_default();
         let (tx, rx) = channel(); app.tx = Some(tx); app.rx = Some(rx); app.apply_theme(&cc.egui_ctx);
         if !app.saved_token.trim().is_empty() { app.trigger_github_sync(cc.egui_ctx.clone()); }
         app
     }
+    /// Ajusta colores claros u oscuros de todos los controles de la aplicación.
     fn apply_theme(&self, ctx: &egui::Context) { ctx.set_visuals(if self.dark_mode { egui::Visuals::dark() } else { egui::Visuals::light() }); }
     /// Genera un marcador único para una nueva petición a GitHub.
     /// El contador se incrementa para que una respuesta anterior nunca suplante a la última.
@@ -343,6 +355,7 @@ impl GitCraftApp {
             let _ = tx.send(AsyncEvent::ManagementLoaded(key, result));
         });
     }
+    /// Crea un Pull Request en GitHub con las ramas y título indicados en pantalla.
     pub fn trigger_create_pr(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, ti, h, b, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_pr_title.clone(), self.new_pr_head.clone(), self.new_pr_base.clone(), self.tx.clone().unwrap());
@@ -353,6 +366,7 @@ impl GitCraftApp {
             let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
         });
     }
+    /// Fusiona un Pull Request por su número utilizando la API de GitHub.
     pub fn trigger_merge_pr(&mut self, ctx: egui::Context, num: u64) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
@@ -362,6 +376,7 @@ impl GitCraftApp {
             let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
         });
     }
+    /// Envía un Issue nuevo a GitHub y gestiona su respuesta asíncrona.
     pub fn trigger_create_issue(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, ti, bo, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_issue_title.clone(), self.new_issue_body.clone(), self.tx.clone().unwrap());
@@ -372,6 +387,7 @@ impl GitCraftApp {
             let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
         });
     }
+    /// Cierra un Issue existente por su número; no borra su historial.
     pub fn trigger_close_issue(&mut self, ctx: egui::Context, num: u64) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
@@ -381,6 +397,8 @@ impl GitCraftApp {
             let _ = tx.send(AsyncEvent::MgmtActionDone(repo_name, result));
         });
     }
+    /// Función de la interfaz que permite solicitar relanzar un workflow desde GitCraft.
+    /// No se utiliza para las pruebas ni los despliegues de este proyecto.
     pub fn trigger_rerun_workflow(&mut self, ctx: egui::Context, id: u64) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tx) = (self.saved_token.clone(), r.full_name.clone(), self.tx.clone().unwrap());
@@ -403,16 +421,21 @@ impl GitCraftApp {
         if self.mcp_token_is_authorized() { self.saved_token.clone() } else { String::new() }
     }
 
+    /// Consulta las herramientas expuestas por el servidor MCP elegido en la interfaz.
+    /// Sólo entrega credenciales si se autorizaron explícitamente.
     pub fn trigger_mcp_discover(&mut self, ctx: egui::Context) {
         self.is_loading = true;
         let (tr, ep, tok, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.token_for_mcp(), self.tx.clone().unwrap());
         spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::McpToolsLoaded(mcp_discover_tools(tr, ep, tok).await)); });
     }
+    /// Ejecuta una herramienta MCP seleccionada con sus argumentos JSON.
+    /// El proceso que recibe el token debe contar con permiso explícito.
     pub fn trigger_mcp_call(&mut self, ctx: egui::Context) {
         self.is_loading = true;
         let (tr, ep, tok, tool, args, tx) = (self.mcp_transport, self.mcp_endpoint.clone(), self.token_for_mcp(), self.mcp_selected_tool.clone(), self.mcp_tool_args.clone(), self.tx.clone().unwrap());
         spawn_task(ctx, async move { let _ = tx.send(AsyncEvent::McpCallResult(mcp_call_tool(tr, ep, tok, tool, args).await)); });
     }
+    /// Solicita publicar una Release en GitHub; esta operación es distinta de crear un tag Git local.
     pub fn trigger_create_release(&mut self, ctx: egui::Context) {
         let Some(r) = &self.selected_repo else { return };
         let (t, f, tg, nm, bo, tx) = (self.saved_token.clone(), r.full_name.clone(), self.new_rel_tag.clone(), self.new_rel_name.clone(), self.new_rel_body.clone(), self.tx.clone().unwrap());
@@ -425,9 +448,13 @@ impl GitCraftApp {
     }
 }
 
+/// Integración con `eframe`: guarda preferencias y actualiza la pantalla en cada ciclo.
 impl eframe::App for GitCraftApp {
+    /// Escribe las preferencias permitidas; gracias a `serde(skip)` no escribe el PAT.
     fn save(&mut self, storage: &mut dyn eframe::Storage) { eframe::set_value(storage, eframe::APP_KEY, self); }
 
+    /// Atiende respuestas pendientes y dibuja las pestañas actuales.
+    /// `&mut self` permite cambiar el estado y `ctx` solicita repintar la interfaz.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let mut pending = Vec::new();
         if let Some(rx) = &self.rx { while let Ok(ev) = rx.try_recv() { pending.push(ev); } }
